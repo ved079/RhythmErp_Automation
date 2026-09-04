@@ -19,6 +19,7 @@ interface Props {
 interface CheckRow {
   field: string
   formula: string
+  calc?: string       // substituted values string shown after "=" in formula col
   expected: number
   actual: number
   ok: boolean
@@ -28,10 +29,18 @@ interface CheckRow {
 const TOLERANCE = 0.05
 
 function r(v: number, dp = 6) { return Math.round(v * 10 ** dp) / 10 ** dp }
+function ind(n: number) { return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }) }
+function fmtVal(v: number): string {
+  if (isNaN(v)) return '…'
+  const a = Math.abs(v)
+  if (a >= 10000) return v.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+  if (a >= 1 || a === 0) return v.toFixed(4)
+  return v.toFixed(6)
+}
 
-function chk(field: string, formula: string, expected: number, actual: number, note?: string): CheckRow {
+function chk(field: string, formula: string, calc: string | undefined, expected: number, actual: number, note?: string): CheckRow {
   // NaN expected = CQP not yet loaded; treat as pending (ok=true so it doesn't inflate fail count)
-  return { field, formula, expected, actual, ok: isNaN(expected) || Math.abs(expected - actual) <= TOLERANCE, note }
+  return { field, formula, calc, expected, actual, ok: isNaN(expected) || Math.abs(expected - actual) <= TOLERANCE, note }
 }
 
 function validateQCLine(line: any): CheckRow[] {
@@ -82,21 +91,33 @@ function validateQCLine(line: any): CheckRow[] {
   const paramDetails: any[] = line.qc_parameter_details ?? []
   const sumParamDeductions = r(paramDetails.reduce((s: number, p: any) => s + parseFloat(p.quantity_deduction ?? 0), 0))
 
+  const paramSumCalc = paramDetails.map((p: any) => parseFloat(p.quantity_deduction ?? 0).toFixed(2)).join(' + ')
+
   return [
-    chk('total_amount', 'grn_qty × base_rate', total_amount, parseFloat(line.total_amount ?? 0)),
-    chk('empty_bags_txn_amount', 'empty_bag_weight × base_rate', empty_bags_txn_amount, parseFloat(line.empty_bags_txn_amount ?? 0)),
-    chk('alternate_accepted_qty', 'grn_qty − empty_bag_weight', accepted_qty, parseFloat(line.alternate_accepted_qty ?? 0)),
-    chk('net_of_empty_bag_amount', 'total_amount − empty_bags_txn_amount', net_of_empty_bag_amount, parseFloat(line.net_of_empty_bag_amount ?? 0)),
-    chk('deduction_percent', 'Σ(param quantity_deductions)', sumParamDeductions, deduction_percent),
-    chk('deduction_weight', 'accepted_qty × ded% / 100', r(accepted_qty * deduction_percent / 100), stored_deduction_weight),
-    chk('qc_deduction_rate', 'base_rate × ded% / 100', qc_deduction_rate, parseFloat(line.qc_deduction_rate ?? 0), 'ERP stores rounded to 4dp'),
-    chk('qc_deduction_amount', dedAmtFormula, exp_qc_deduction_amount, stored_qc_deduction_amount),
-    chk('transaction_amount_without_discount', 'net_of_empty_bag − qc_deduction', exp_txn_without_discount, parseFloat(line.transaction_amount_without_discount ?? 0)),
+    chk('total_amount', 'grn_qty × base_rate', `${grn_qty} kg × ₹${ind(base_rate)}`, total_amount, parseFloat(line.total_amount ?? 0)),
+    chk('empty_bags_txn_amount', 'empty_bag_weight × base_rate', `${empty_bag_weight} kg × ₹${ind(base_rate)}`, empty_bags_txn_amount, parseFloat(line.empty_bags_txn_amount ?? 0)),
+    chk('alternate_accepted_qty', 'grn_qty − empty_bag_weight', `${grn_qty} − ${empty_bag_weight} kg`, accepted_qty, parseFloat(line.alternate_accepted_qty ?? 0)),
+    chk('net_of_empty_bag_amount', 'total_amount − empty_bags_txn_amount', `₹${ind(total_amount)} − ₹${ind(empty_bags_txn_amount)}`, net_of_empty_bag_amount, parseFloat(line.net_of_empty_bag_amount ?? 0)),
+    chk('deduction_percent', 'Σ(param quantity_deductions)', paramSumCalc, sumParamDeductions, deduction_percent),
+    chk('deduction_weight', 'accepted_qty × ded% / 100', `${accepted_qty} × ${deduction_percent} / 100`, r(accepted_qty * deduction_percent / 100), stored_deduction_weight),
+    chk('qc_deduction_rate', 'base_rate × ded% / 100', `₹${ind(base_rate)} × ${deduction_percent} / 100`, qc_deduction_rate, parseFloat(line.qc_deduction_rate ?? 0), 'ERP stores rounded to 4dp'),
+    chk('qc_deduction_amount', dedAmtFormula,
+      isRateWeight ? `${stored_deduction_weight} × ₹${ind(base_rate)}` : `₹${ind(stored_qc_deduction_rate)} × ${accepted_qty} kg`,
+      exp_qc_deduction_amount, stored_qc_deduction_amount),
+    chk('transaction_amount_without_discount', 'net_of_empty_bag − qc_deduction', `₹${ind(net_of_empty_bag_amount)} − ₹${ind(stored_qc_deduction_amount)}`, exp_txn_without_discount, parseFloat(line.transaction_amount_without_discount ?? 0)),
     ...(discount_rate > 0 ? [
-      chk('c_d_deduction', isRateWeight ? 'accepted_qty × discount% / 100' : '(accepted_qty − ded_wt) × discount% / 100', exp_cd_deduction_qty, stored_cd_deduction_qty),
-      chk('cash_discount_deduction_amount', isRateWeight ? 'stored_c_d_deduction × base_rate' : 'txn_without_discount × discount%', cash_discount_amount, parseFloat(line.cash_discount_deduction_amount ?? 0)),
+      chk('c_d_deduction',
+        isRateWeight ? 'accepted_qty × discount% / 100' : '(accepted_qty − ded_wt) × discount% / 100',
+        isRateWeight ? `${accepted_qty} × ${discount_rate} / 100` : `(${accepted_qty} − ${stored_deduction_weight}) × ${discount_rate} / 100`,
+        exp_cd_deduction_qty, stored_cd_deduction_qty),
+      chk('cash_discount_deduction_amount',
+        isRateWeight ? 'stored_c_d_deduction × base_rate' : 'txn_without_discount × discount%',
+        isRateWeight ? `${stored_cd_deduction_qty.toFixed(3)} × ₹${ind(base_rate)}` : `₹${ind(exp_txn_without_discount)} × ${discount_rate}%`,
+        cash_discount_amount, parseFloat(line.cash_discount_deduction_amount ?? 0)),
     ] : []),
-    chk('txn_currency_amount', 'purchase_before_CD − cash_discount', txn_currency_amount, parseFloat(line.txn_currency_amount ?? 0), 'ERP stores rounded to 2dp'),
+    chk('txn_currency_amount', 'purchase_before_CD − cash_discount',
+      `₹${ind(net_of_empty_bag_amount)} − ₹${ind(r(stored_deduction_weight * base_rate))} − ₹${ind(cash_discount_amount)}`,
+      txn_currency_amount, parseFloat(line.txn_currency_amount ?? 0), 'ERP stores rounded to 2dp'),
   ]
 }
 
@@ -137,9 +158,9 @@ function validateQCParams(line: any, cqpRanges: CQPRange[] | undefined): CheckRo
     const actualVal = parseFloat(p.actual_value ?? 0)
     const allowable = parseFloat(p.allowable_percent ?? 0)
     const storedDed = parseFloat(p.quantity_deduction ?? 0)
-    if (!cqpRanges) return chk(`param_${i + 1} (type ${qualityType})`, '…', NaN, storedDed)
+    if (!cqpRanges) return chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', '…', NaN, storedDed)
     const { deduction: expDed, formulaStr } = calcTieredDeduction(actualVal, allowable, cqpRanges, qualityType)
-    return chk(`param_${i + 1} (type ${qualityType})`, formulaStr, expDed, storedDed)
+    return chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', formulaStr, expDed, storedDed)
   })
 }
 
@@ -153,30 +174,32 @@ function validateBags(line: any): CheckRow[] {
     const conv = parseFloat(b.uom_conversion_kg ?? 0)
     return s + (conv > 0 ? qty * wt * conv : parseFloat(b.total_weight_of_bags ?? 0))
   }, 0)
+  const bagCalc = bagDetails.length === 1
+    ? (() => { const b = bagDetails[0]; const qty = parseFloat(b.quantity_of_bags??0); const wt = parseFloat(b.weight_of_bags??0); const conv = parseFloat(b.uom_conversion_kg??0); return conv > 0 ? `${qty} × ${wt} kg × ${conv}` : `${parseFloat(b.total_weight_of_bags??0)} kg (stored)` })()
+    : `${bagDetails.length} bag types`
   return [
-    chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag × uom_conv) = Line empty_bag_wt', r(computedBagWeight), r(empty_bag_weight)),
+    chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag × uom_conv)', bagCalc, r(computedBagWeight), r(empty_bag_weight)),
   ]
 }
 
 // ── Checks table ─────────────────────────────────────────
-// Grid: # | field | formula | expected | actual | icon
-// Exact-pass rows: expected+actual collapse into one muted value spanning both columns
-// Exact match of HTML mockup .tbl-head / .trow grid
-const COLS = '20px minmax(130px,1fr) minmax(0,1fr) 86px 86px 20px'
+// 5-col receipt grid: Field | Formula = Calculation | Computed | ERP Stored | Icon
+const COLS = '1fr 2fr 1fr 1fr 28px'
 function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], revealStart: number, revealedCount: number }) {
   const failCount = rows.filter(r => !r.ok).length
   const allOk = failCount === 0
+  const headers = ['Field', 'Formula = Calculation', 'Computed', 'ERP Stored', '']
   return (
     <div className="overflow-hidden">
-      {/* .tbl-head */}
-      <div className="grid bg-gray-50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700"
-        style={{ gridTemplateColumns: COLS, gap: '10px', padding: '5px 13px' }}>
-        {['#', 'Field', 'Formula', 'Expected', 'Actual', ''].map((h, i) => (
-          <span key={i} className={`text-[9px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-gray-500 ${i >= 3 ? 'text-right' : ''}`}>{h}</span>
+      {/* Column headers */}
+      <div className="grid border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40"
+        style={{ gridTemplateColumns: COLS }}>
+        {headers.map((h, i) => (
+          <span key={i} className={`text-[8px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400 px-3 py-[7px] ${i >= 2 && i < 4 ? 'text-right' : ''} ${i === 1 ? 'border-l border-gray-200 dark:border-gray-700' : ''} ${i === 2 ? 'border-l border-gray-200 dark:border-gray-700' : ''} ${i === 3 ? 'border-l border-gray-200 dark:border-gray-700' : ''}`}>{h}</span>
         ))}
       </div>
 
-      {/* .trow rows */}
+      {/* Rows */}
       {rows.map((row, i) => {
         const revealed = (revealStart + i) < revealedCount
         const diff = Math.abs(row.expected - row.actual)
@@ -186,40 +209,45 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
         const isExact = row.ok && !isPending && diff < 5e-7
         return (
           <div key={i}
-            className={`grid items-center border-b border-gray-100 dark:border-gray-800 last:border-0 ${isPending ? '' : isAmber ? 'bg-amber-50/60 dark:bg-amber-900/10' : isFail ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}
-            style={{ gridTemplateColumns: COLS, gap: '10px', padding: '7px 13px' }}>
+            className={`grid border-b border-gray-100 dark:border-gray-800 last:border-0 ${isAmber ? 'bg-amber-50/60 dark:bg-amber-900/10' : isFail ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}
+            style={{ gridTemplateColumns: COLS }}>
 
-            {/* .td-n — mono 9.5px dim */}
-            <span className="font-mono text-[9.5px] text-gray-400 dark:text-gray-500">{String(i + 1).padStart(2, '0')}</span>
-
-            {/* .td-f — mono 11px medium + .td-note */}
-            <div className="min-w-0">
-              <div className={`font-mono text-[11px] font-medium ${isFail ? 'text-red-600 dark:text-red-400' : isAmber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-200'}`}>
+            {/* Field name */}
+            <div className={`px-3 py-[11px] flex items-center border-r border-gray-100 dark:border-gray-800 min-w-0`}>
+              <span className={`text-[11px] font-semibold truncate ${isFail ? 'text-red-600 dark:text-red-400' : isAmber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-200'}`}>
                 {row.field}
-              </div>
-              {isAmber && <span className="block font-mono text-[9px] mt-[1px] text-amber-600 dark:text-amber-400">≈ Δ {diff.toFixed(6)} · {row.note ?? 'rounding'}</span>}
-              {isFail && row.note && <span className="block font-mono text-[9px] mt-[1px] text-red-600 dark:text-red-400">{row.note}</span>}
+              </span>
             </div>
 
-            {/* .td-fmla — mono 10px sub, truncate */}
-            <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap">{row.formula}</div>
+            {/* Formula = Calculation */}
+            <div className="px-3 py-[11px] flex flex-col gap-[3px] border-r border-gray-100 dark:border-gray-800 min-w-0">
+              <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-snug">{row.formula}</span>
+              {row.calc && row.calc !== '…' && (
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 leading-snug">= {row.calc}</span>
+              )}
+              {isPending && <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-600">= …</span>}
+              {isAmber && <span className="font-mono text-[9px] text-amber-600 dark:text-amber-400">Δ {diff.toFixed(6)} · {row.note ?? 'rounding'}</span>}
+              {isFail && row.note && <span className="font-mono text-[9px] text-red-500 dark:text-red-400">{row.note}</span>}
+            </div>
 
-            {/* .td-exact spans 4/6 for exact-pass; else .td-exp + .td-act */}
-            {isPending ? (
-              <>
-                <div className="font-mono text-[11px] text-gray-300 dark:text-gray-600 text-right">…</div>
-                <div className="font-mono text-[11px] text-right text-gray-700 dark:text-gray-200">{row.actual.toFixed(4)}</div>
-              </>
-            ) : isExact ? (
-              <div className="font-mono text-[11px] text-gray-400 dark:text-gray-500 text-right" style={{ gridColumn: '4/6' }}>{row.actual.toFixed(4)}</div>
-            ) : (
-              <>
-                <div className={`font-mono text-[11px] text-right ${isAmber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>{row.expected.toFixed(4)}</div>
-                <div className={`font-mono text-[11px] font-semibold text-right ${isFail ? 'text-red-600 dark:text-red-400' : isAmber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-200'}`}>{row.actual.toFixed(4)}</div>
-              </>
-            )}
+            {/* Computed (expected) */}
+            <div className={`px-3 py-[11px] flex items-center justify-end border-r border-gray-100 dark:border-gray-800`}>
+              {isPending
+                ? <span className="font-mono text-[11px] text-gray-300 dark:text-gray-600">…</span>
+                : isExact
+                  ? <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{fmtVal(row.expected)}</span>
+                  : <span className={`text-[11px] font-semibold ${isAmber ? 'text-amber-600 dark:text-amber-400' : isFail ? 'text-red-500 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>{fmtVal(row.expected)}</span>
+              }
+            </div>
 
-            {/* .td-ic */}
+            {/* ERP Stored (actual) */}
+            <div className="px-3 py-[11px] flex items-center justify-end">
+              <span className={`text-[11px] font-semibold ${isExact ? 'text-gray-400 dark:text-gray-500' : isFail ? 'text-red-600 dark:text-red-400' : isAmber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-200'}`}>
+                {fmtVal(row.actual)}
+              </span>
+            </div>
+
+            {/* Icon */}
             <div className="flex items-center justify-center">
               {isPending
                 ? <Loader2 className="size-3 animate-spin text-gray-300 dark:text-gray-600" />
@@ -231,9 +259,8 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
         )
       })}
 
-      {/* .tbl-foot */}
-      <div className={`flex items-center justify-between border-t border-gray-200 dark:border-gray-700 ${allOk ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/50 dark:bg-red-900/10'}`}
-        style={{ padding: '7px 13px' }}>
+      {/* Footer */}
+      <div className={`flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-3 py-[7px] ${allOk ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/50 dark:bg-red-900/10'}`}>
         <div className={`flex items-center gap-[5px] text-[11px] font-semibold ${allOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
           {allOk ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
           {allOk ? 'All checks passed' : `${failCount} check${failCount > 1 ? 's' : ''} failed`}
