@@ -239,8 +239,12 @@ function FormulaInfoButton({ tooltip }: { tooltip: React.ReactNode }) {
     if (pos) { setPos(null); return }
     const r = btnRef.current!.getBoundingClientRect()
     const popW = 320
+    const popH = 380 // approximate height
     const left = Math.min(r.right + 8, window.innerWidth - popW - 12)
-    setPos({ top: r.top, left })
+    const top = r.top + popH > window.innerHeight - 16
+      ? Math.max(8, window.innerHeight - popH - 16)
+      : r.top
+    setPos({ top, left })
   }
 
   return (
