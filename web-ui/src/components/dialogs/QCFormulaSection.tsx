@@ -24,6 +24,7 @@ interface CheckRow {
   actual: number
   ok: boolean
   note?: string
+  tooltip?: React.ReactNode
 }
 
 const TOLERANCE = 0.05
@@ -158,9 +159,26 @@ function validateQCParams(line: any, cqpRanges: CQPRange[] | undefined): CheckRo
     const actualVal = parseFloat(p.actual_value ?? 0)
     const allowable = parseFloat(p.allowable_percent ?? 0)
     const storedDed = parseFloat(p.quantity_deduction ?? 0)
-    if (!cqpRanges) return chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', '…', NaN, storedDed)
+    const tieredTooltip = (
+      <div className="text-[10px] leading-relaxed space-y-[6px]">
+        <div className="font-semibold text-gray-200 text-[11px]">Tiered deduction formula</div>
+        <div className="text-gray-400">Like income-tax brackets — each slice of excess is penalised at its own rate, not the highest rate on everything.</div>
+        <div className="border-t border-gray-700 pt-[6px] space-y-[3px]">
+          <div><span className="text-gray-300 font-medium">actual</span> — measured quality value ({actualVal})</div>
+          <div><span className="text-gray-300 font-medium">allowable</span> — max permitted by contract ({allowable})</div>
+          <div><span className="text-gray-300 font-medium">mult</span> — per-range penalty multiplier from CQP master</div>
+        </div>
+        <div className="border-t border-gray-700 pt-[6px]">
+          <div className="text-gray-300 font-medium mb-[2px]">How it computes:</div>
+          <div className="font-mono text-[9px] text-gray-400">For each range above allowable:</div>
+          <div className="font-mono text-[9px] text-amber-300">(min(actual, range_max) − max(allowable, prev_max)) × mult</div>
+          <div className="font-mono text-[9px] text-gray-400 mt-[2px]">Sum all contributing ranges → quantity deduction %</div>
+        </div>
+      </div>
+    )
+    if (!cqpRanges) return { ...chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', '…', NaN, storedDed), tooltip: tieredTooltip }
     const { deduction: expDed, formulaStr } = calcTieredDeduction(actualVal, allowable, cqpRanges, qualityType)
-    return chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', formulaStr, expDed, storedDed)
+    return { ...chk(`param_${i + 1} (type ${qualityType})`, 'tiered(actual − allowable) × mult', formulaStr, expDed, storedDed), tooltip: tieredTooltip }
   })
 }
 
@@ -221,7 +239,14 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
 
             {/* Formula = Calculation */}
             <div className="px-3 py-[11px] flex flex-col gap-[3px] border-r border-gray-100 dark:border-gray-800 min-w-0">
-              <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-snug">{row.formula}</span>
+              <span className={`text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-snug ${row.tooltip ? 'relative group/tip cursor-help' : ''}`}>
+                {row.formula}
+                {row.tooltip && (
+                  <span className="pointer-events-none absolute left-0 bottom-full mb-2 z-50 hidden group-hover/tip:block w-72 rounded-lg bg-gray-900 dark:bg-gray-800 border border-gray-700 shadow-xl px-3 py-3 text-gray-300">
+                    {row.tooltip}
+                  </span>
+                )}
+              </span>
               {row.calc && row.calc !== '…' && (
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 leading-snug">= {row.calc}</span>
               )}
