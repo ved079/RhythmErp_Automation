@@ -224,14 +224,19 @@ function FormulaInfoButton({ tooltip }: { tooltip: React.ReactNode }) {
 
   useEffect(() => {
     if (!pos) return
-    function handler(e: MouseEvent) {
+    function onMouseDown(e: MouseEvent) {
       if (popRef.current && !popRef.current.contains(e.target as Node) &&
           btnRef.current && !btnRef.current.contains(e.target as Node)) {
         setPos(null)
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    function onScroll() { setPos(null) }
+    document.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('scroll', onScroll, true)
+    }
   }, [pos])
 
   function handleClick(e: React.MouseEvent) {
