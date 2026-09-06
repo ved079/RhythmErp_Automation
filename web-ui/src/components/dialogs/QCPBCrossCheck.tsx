@@ -366,7 +366,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
       if (data.error) throw new Error(data.error)
       setQcData(data)
       setPbLoading(true)
-      fetchPBByQC(token!, tenantId, String(qc.id))
+      fetchPBByQC(token!, tenantId, String(qc.id), qc.ref_no)
         .then(pb => {
           if (!pb) setPbError('No Purchase Booking found for this QC')
           else if (pb.error) setPbError(pb.error)

@@ -62,6 +62,35 @@ const PurchaseChainSection = dynamic(() => import('@/components/dialogs/Purchase
 const JVCheckSection = dynamic(() => import('@/components/dialogs/JVCheckSection').then(m => ({ default: m.JVCheckSection })), { ssr: false })
 const QCFormulaSection = dynamic(() => import('@/components/dialogs/QCFormulaSection').then(m => ({ default: m.QCFormulaSection })), { ssr: false })
 const QCPBCrossCheck = dynamic(() => import('@/components/dialogs/QCPBCrossCheck').then(m => ({ default: m.QCPBCrossCheck })), { ssr: false })
+
+function QCValidatorPanel({ erpToken, erpTenantId, onNeedsToken, onClearToken }: { erpToken: string; erpTenantId: string; onNeedsToken: () => void; onClearToken: () => void }) {
+  const [qcSubTab, setQcSubTab] = React.useState<'formula' | 'crosscheck'>('formula')
+  return (
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+        <div className="flex items-center h-10 px-4 gap-0">
+          <button onClick={() => setQcSubTab('formula')}
+            className={`flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${qcSubTab === 'formula' ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+            <CheckCircle2 className="size-4" />
+            <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">QC Formula Validator</span>
+          </button>
+          <button onClick={() => setQcSubTab('crosscheck')}
+            className={`flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${qcSubTab === 'crosscheck' ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+            <ArrowLeftRight className="size-4" />
+            <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">QC ↔ PB Cross-check</span>
+          </button>
+          <div className="flex-1" />
+          <span className="text-[12px] text-gray-400 dark:text-gray-500 mr-4">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">QC Validator</span></span>
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden min-h-0 p-4">
+        {qcSubTab === 'formula' && <QCFormulaSection erpToken={erpToken} erpTenantId={erpTenantId} onNeedsToken={onNeedsToken} onClearToken={onClearToken} />}
+        {qcSubTab === 'crosscheck' && <QCPBCrossCheck erpToken={erpToken} erpTenantId={erpTenantId} onNeedsToken={onNeedsToken} onClearToken={onClearToken} />}
+      </div>
+    </div>
+  )
+}
+
 const ResultsTab = dynamic(() => import('@/components/results/ResultsTab').then(m => ({ default: m.ResultsTab })), { ssr: false })
 const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').then(m => ({ default: m.MyTicketsTab })), { ssr: false })
 const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
@@ -117,7 +146,6 @@ export default function Home() {
   const [sidebarModules, setSidebarModules] = useState<SidebarModule[]>([])
   const [apiModules, setApiModules] = useState<ApiModule[]>([])
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
-  const [qcSubTab, setQcSubTab] = useState<'formula' | 'crosscheck'>('formula')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [justExpandedId, setJustExpandedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('test-runner')
@@ -1024,44 +1052,12 @@ export default function Home() {
             </div>
           )}
           {selectedModule === 'qc-formula-check' && (
-              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
-                  <div className="flex items-center h-10 px-4 gap-0">
-                    <button
-                      onClick={() => setQcSubTab('formula')}
-                      className={`flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${qcSubTab === 'formula' ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-                      <CheckCircle2 className="size-4" />
-                      <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">QC Formula Validator</span>
-                    </button>
-                    <button
-                      onClick={() => setQcSubTab('crosscheck')}
-                      className={`flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${qcSubTab === 'crosscheck' ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-                      <ArrowLeftRight className="size-4" />
-                      <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">QC ↔ PB Cross-check</span>
-                    </button>
-                    <div className="flex-1" />
-                    <span className="text-[12px] text-gray-400 dark:text-gray-500 mr-4">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">QC Validator</span></span>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-hidden min-h-0 p-4">
-                  {qcSubTab === 'formula' && (
-                    <QCFormulaSection
-                      erpToken={erpToken}
-                      erpTenantId={erpTenantId || '681'}
-                      onNeedsToken={() => setTokenDialogOpen(true)}
-                      onClearToken={onClearToken}
-                    />
-                  )}
-                  {qcSubTab === 'crosscheck' && (
-                    <QCPBCrossCheck
-                      erpToken={erpToken}
-                      erpTenantId={erpTenantId || '681'}
-                      onNeedsToken={() => setTokenDialogOpen(true)}
-                      onClearToken={onClearToken}
-                    />
-                  )}
-                </div>
-              </div>
+            <QCValidatorPanel
+              erpToken={erpToken}
+              erpTenantId={erpTenantId || '681'}
+              onNeedsToken={() => setTokenDialogOpen(true)}
+              onClearToken={onClearToken}
+            />
           )}
           {selectedModule === 'credentials' && (
             <CredentialsScreen

@@ -699,34 +699,54 @@ class PBByQCRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str
     qc_id: str
+    qc_ref_no: str = ""
 
 @app.post("/api/pb-by-qc")
 def pb_by_qc_endpoint(request: PBByQCRequest):
-    """Find the Purchase Booking linked to a given QC id by scanning PB listing."""
+    """Find the Purchase Booking linked to a given QC by searching listing + verifying detail."""
     client = _make_client(request.erp_token, request.erp_tenant_id)
     qc_id = int(request.qc_id)
-    for page in range(1, 5):
-        resp = client.session.get(
-            f"{client.BASE_URL}/procure_to_pay/purchase-booking/",
-            params={"page": page, "limit": 50, "filters": "", "screen_name": "Purchase Booking", "search": ""},
-            timeout=30,
-        )
-        if resp.status_code != 200:
-            break
-        data = resp.json()
-        rows = data.get("screenmatlistingdata_set") or []
-        for r in rows:
-            if int(r.get("qc_ref_id_id") or -1) == qc_id:
+    # Search the PB listing using the QC ref no to narrow results; fall back to full scan
+    search_terms = [request.qc_ref_no, ""] if request.qc_ref_no else [""]
+    seen_ids: set = set()
+    for search in search_terms:
+        for page in range(1, 10):
+            resp = client.session.get(
+                f"{client.BASE_URL}/procure_to_pay/purchase-booking/",
+                params={"page": page, "limit": 50, "filters": "", "screen_name": "Purchase Booking", "search": search},
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                break
+            data = resp.json()
+            rows = data.get("screenmatlistingdata_set") or []
+            for r in rows:
                 pb_id = r.get("id") or r.get("pk")
-                if pb_id:
-                    detail = client.session.get(
-                        f"{client.BASE_URL}/procure_to_pay/purchase-booking/{pb_id}/",
-                        timeout=30,
-                    )
-                    if detail.status_code == 200:
-                        return JSONResponse(detail.json())
-        if not data.get("page_has_next"):
-            break
+                if not pb_id or pb_id in seen_ids:
+                    continue
+                # Fast check: listing row may have qc_ref_id_id as ref string or numeric id
+                row_qc = r.get("qc_ref_id_id")
+                if row_qc is not None:
+                    try:
+                        matches = int(row_qc) == qc_id
+                    except (ValueError, TypeError):
+                        matches = (request.qc_ref_no and str(row_qc) == request.qc_ref_no)
+                    if not matches:
+                        seen_ids.add(pb_id)
+                        continue
+                # Otherwise fetch detail to verify
+                detail_resp = client.session.get(
+                    f"{client.BASE_URL}/procure_to_pay/purchase-booking/{pb_id}/",
+                    timeout=30,
+                )
+                seen_ids.add(pb_id)
+                if detail_resp.status_code != 200:
+                    continue
+                detail = detail_resp.json()
+                if int(detail.get("qc_ref_id_id") or -1) == qc_id:
+                    return JSONResponse(detail)
+            if not data.get("page_has_next"):
+                break
     return JSONResponse({"error": "No Purchase Booking found for this QC"}, status_code=404)
 
 @app.post("/api/qc-fetch")
