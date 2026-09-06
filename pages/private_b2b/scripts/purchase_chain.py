@@ -137,7 +137,8 @@ def _rand_rate() -> float:
 # Realistic ranges for QC "user inputs" (empty bag weight / deduction /
 # discount). The manual QC 1345 used 0–12 kg bags, 2–3% deductions, 0–5%
 # discounts; these stay dynamic per run.
-_WEIGHT_PER_BAG_KG = 1.0  # standard PP/jute bag weight; 1 bag row in bags detail
+_BAG_WEIGHT_MIN = 0.5   # kg, lower bound for per-bag weight in the bags detail row
+_BAG_WEIGHT_MAX = 2.0   # kg, upper bound — keep small so empty_bag_weight << grn_qty
 _DEDUCTION_MIN = 0.0
 _DEDUCTION_MAX = 5.0
 _DISCOUNT_MIN = 0.0
@@ -428,7 +429,19 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
 
     out = []
     for it in items:
-        empty_bag_weight = _WEIGHT_PER_BAG_KG
+        # Derive empty_bag_weight from the bags detail math:
+        #   total_weight_of_bags = quantity_of_bags × weight_of_bags × uom_conversion_kg
+        # quantity_of_bags=1 (one bag-spec row, matching the manual QC pattern).
+        # uom_conversion_kg converts from kg to the item's UOM (e.g. 0.001 for MT).
+        uom_id = it.get("uom") or it.get("base_uom")
+        uom_conversion_kg = float((kg_to_uom_factors or {}).get(uom_id, 1.0)) if uom_id else 1.0
+        weight_of_bags = round(random.uniform(_BAG_WEIGHT_MIN, _BAG_WEIGHT_MAX), 2)
+        quantity_of_bags = 1
+        total_weight_of_bags = round(quantity_of_bags * weight_of_bags * uom_conversion_kg, 6)
+        # Cap at 5 % of received qty so alternate_accepted_qty is always positive.
+        empty_bag_weight = min(total_weight_of_bags, round(it["accepted_qty"] * 0.05, 6))
+        empty_bag_weight = max(empty_bag_weight, 0.0)
+
         deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
@@ -466,9 +479,10 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
             "qc_bags_details": [
                 {
                     "type_of_bags_ref_id": bags_type_id,
-                    "quantity_of_bags": 1,
-                    "weight_of_bags": empty_bag_weight,
-                    "total_weight_of_bags": empty_bag_weight,
+                    "quantity_of_bags": quantity_of_bags,
+                    "weight_of_bags": weight_of_bags,
+                    "uom_conversion_kg": uom_conversion_kg,
+                    "total_weight_of_bags": total_weight_of_bags,
                 }
             ],
         })
@@ -512,74 +526,74 @@ def _rand_round_off() -> float:
 
 
 def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) -> List[dict]:
-    """Build PB lines mirroring the in-flow QC lines (manual PB 2480 shape).
+    """Build PB lines by patching directly from stored QC details.
 
-    Each QC line already carries base_rate / grn_qty / no_of_bags /
-    empty_bag_weight / empty_bags_txn_amount / alternate_accepted_qty /
-    discount_rate / c_d_deduction / txn_currency_amount. PB reuses those and
-    adds PB-specific inputs (labour / GST / round off). GST is only applied
-    when is_gst_set_off is True; gst_type follows tax_rate (25 → CGST+SGST,
-    5 → IGST). amount_detail = QC txn_currency_amount − labour_charges.
+    Every field in the PB line comes from the corresponding QC line — same as
+    what the ERP UI does when the user selects a QC on the PB form. uom_conversion
+    is taken from the chain items list (resolved from Item Master), not from the QC.
+    GST is computed from the item's tax_rate.
     """
-    from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import (
-        build_pb_line,
-        gst_type_for_rate,
-    )
+    from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import gst_type_for_rate
 
     tax_by_item = {it["item_ref_id"]: float(it.get("tax_rate") or 0.0) for it in (items or [])}
-
-    def _q4(v):
-        # ERP caps PB quantity fields at 4 decimal places.
-        return round(float(v or 0.0), 4)
+    uom_conv_by_item = {it["item_ref_id"]: float(it.get("uom_conversion") or 1.0) for it in (items or [])}
 
     out = []
     for qc in qc_items:
-        labour = 0.0
-        amount_detail = round(float(qc["txn_currency_amount"] or 0.0), 6)
-        tax_rate = tax_by_item.get(qc["item_ref_id"], 0.0)
-        gst_type = gst_type_for_rate(tax_rate)
-        discount_rate = float(qc.get("discount_rate") or 0.0)
-        # Monetary cash discount: amount_detail from QC is post-discount, so
-        # pre_discount = amount_detail / (1 - discount_rate/100)
-        # cash_discount = pre_discount - amount_detail
-        if discount_rate > 0.0:
-            cash_discount = round(amount_detail * discount_rate / (100.0 - discount_rate), 6)
-        else:
-            cash_discount = 0.0
-        alt_qty     = _q4(qc["grn_qty"])
-        alt_net_qty = _q4(qc["alternate_accepted_qty"])
-        base_rate_f = float(qc["base_rate"])
-        total_amount            = round(alt_qty * base_rate_f, 4)
-        net_of_empty_bag        = round(alt_net_qty * base_rate_f, 4)
-        deduction_weight        = _q4(qc.get("alternate_deduction_weight") or qc.get("deduction_weight") or 0.0)
-        qc_deduction            = _q4(qc.get("qc_deduction_amount") or 0.0)
-        txn_without_discount    = round(net_of_empty_bag - qc_deduction, 4)
-        out.append(build_pb_line(
-            item_ref_id=qc["item_ref_id"],
-            hsn_sac_no=qc["hsn_sac_no"],
-            alternate_uom=qc.get("alternate_uom", ctx.alternate_uom if ctx else 3),
-            uom=qc.get("uom", ctx.base_uom if ctx else 4),
-            base_rate=base_rate_f,
-            alternate_qty=alt_qty,
-            no_of_bags=qc["no_of_bags"],
-            empty_bag_weight=_q4(qc["empty_bag_weight"]),
-            empty_bags_txn_amount=_q4(qc["empty_bags_txn_amount"]),
-            alternate_net_qty=alt_net_qty,
-            discount_percentage=_q4(discount_rate),
-            discount_amount=cash_discount,
-            amount_detail=amount_detail,
-            labour_charges=labour,
-            transport=0.0,
-            tax_rate=tax_rate,
-            gst_type=gst_type,
-            uom_conversion=qc.get("uom_conversion", 1.0),
-            alternate_gate_pass_quantity=alt_qty,
-            total_amount=total_amount,
-            net_of_empty_bag_amount=net_of_empty_bag,
-            alternate_deduction_weight=deduction_weight,
-            qc_deduction_amount=qc_deduction,
-            transaction_amount_without_discount=txn_without_discount,
-        ))
+        item_id = qc["item_ref_id"]
+        tax_rate = tax_by_item.get(item_id, 0.0)
+        uom_conv = uom_conv_by_item.get(item_id, float(qc.get("uom_conversion") or 1.0))
+
+        txn_amount = float(qc.get("txn_currency_amount") or 0.0)
+        gst_type = gst_type_for_rate(tax_rate) if tax_rate else None
+        igst = cgst = sgst = 0.0
+        if tax_rate and gst_type == "IGST":
+            igst = round(txn_amount * tax_rate / 100.0, 6)
+        elif tax_rate and gst_type in ("CGST + SGST", "CGST+SGST"):
+            cgst = sgst = round(txn_amount * tax_rate / 200.0, 6)
+        tax_amount = round(igst + cgst + sgst, 6)
+        total_txn = round(txn_amount + tax_amount, 6)
+
+        out.append({
+            "item_ref_id": item_id,
+            "alternate_uom": qc.get("alternate_uom", ctx.alternate_uom if ctx else 3),
+            "hsn_sac_no": qc["hsn_sac_no"],
+            "uom_conversion": uom_conv,
+            "base_rate": float(qc.get("base_rate") or 0.0),
+            "alternate_gate_pass_quantity": float(qc.get("grn_qty") or 0.0),
+            "grn_alternate_rejected_qty": 0.0,
+            "alternate_qty": float(qc.get("grn_qty") or 0.0),
+            "total_amount": float(qc.get("total_amount") or 0.0),
+            "no_of_bags": int(qc.get("no_of_bags") or 0),
+            "empty_bag_weight": float(qc.get("empty_bag_weight") or 0.0),
+            "alternate_net_qty": float(qc.get("alternate_accepted_qty") or 0.0),
+            "uom": qc.get("uom", ctx.base_uom if ctx else 4),
+            "net_of_empty_bag_amount": float(qc.get("net_of_empty_bag_amount") or 0.0),
+            "alternate_deduction_weight": float(qc.get("deduction_weight") or 0.0),
+            "alternate_c_d_deduction": float(qc.get("c_d_deduction") or 0.0),
+            "qc_alternate_rejected_qty": float(qc.get("alternate_rejected_qty") or 0.0),
+            "alternate_net_purchase_qty": float(qc.get("alternate_net_purchase_qty") or 0.0),
+            "empty_bags_txn_amount": float(qc.get("empty_bags_txn_amount") or 0.0),
+            "qc_deduction_amount": float(qc.get("qc_deduction_amount") or 0.0),
+            "transaction_amount_without_discount": float(qc.get("transaction_amount_without_discount") or 0.0),
+            "discount_percentage": float(qc.get("discount_rate") or 0.0) or None,
+            "txn_currency_discount_amount_details": float(qc.get("cash_discount_deduction_amount") or 0.0),
+            "txn_currency_amount_detail": txn_amount,
+            "tax_rate": float(tax_rate) if tax_rate else None,
+            "gst_type": gst_type,
+            "txn_currency_igst_rate": tax_rate if gst_type == "IGST" else None,
+            "txn_currency_igst_amount": igst if igst else 0.0,
+            "txn_currency_cgst_rate": tax_rate / 2.0 if cgst else None,
+            "txn_currency_cgst_amount": cgst if cgst else 0.0,
+            "txn_currency_sgst_rate": tax_rate / 2.0 if sgst else None,
+            "txn_currency_sgst_amount": sgst if sgst else 0.0,
+            "txn_currency_tax_amount": tax_amount,
+            "labour_charges": 0.0,
+            "transport": 0.0,
+            "advance_paid": None,
+            "txn_currency_total_txn_amount": total_txn,
+            "rate": float(qc.get("rate") or 0.0),
+        })
     return out
 
 
@@ -2059,45 +2073,50 @@ class PurchaseChain:
         ctx: Optional[ChainContext] = None,
         qc_items: Optional[List[dict]] = None,
     ) -> dict:
-        from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import build_pb_payload
         if qc_items:
             pb_items = _pb_items_from_qc(qc_items, items=items, ctx=ctx)
         else:
             pb_items = _pb_items_from(items, ctx=ctx)
-        overrides = overrides or {}
+
+        txn_amount_total = round(sum(float(it.get("txn_currency_amount_detail") or 0.0) for it in pb_items), 6)
+        discount_total = round(sum(float(it.get("txn_currency_discount_amount_details") or 0.0) for it in pb_items), 6)
+        total_with_tax = round(sum(float(it.get("txn_currency_total_txn_amount") or 0.0) for it in pb_items), 6)
         supplier_ref_type = ctx.supplier_ref_type if ctx else "Supplier"
-        header_extra = {
+
+        payload = {
+            "transaction_date": date.today().isoformat(),
+            "is_tds_applicable": None,
+            "transaction_ref_no": "",
+            "supplier_ref_id": supplier_ref_id,
+            "supplier_ref_type": supplier_ref_type,
+            "tax_registration_status": "Registered",
+            "qc_ref_id_id": qc_id,
+            "grn_ref_id_id": grn_id,
+            "po_ref_id_id": po_id,
+            "booking_status": "Pending",
+            "so_ref_id": None,
+            "parameter6": ctx.parameter6 if ctx else 1,
+            "parameter2": ctx.parameter2 if ctx else 1,
+            "parameter1": ctx.parameter1 if ctx else 1,
+            "parameter5": ctx.parameter5 if ctx else 1,
+            "supplier_payment_terms_ref_id": ctx.pb_payment_terms if ctx else None,
+            "txn_currency": ctx.txn_currency if ctx else 8,
+            "txn_currency_amount": txn_amount_total,
+            "section_ref_id": None,
+            "tds_percent_applicable": None,
+            "tds_amount": None,
+            "txn_currency_total_amount": total_with_tax,
             "round_off_credit_amount": None,
-            "round_off_debit_amount": None,
+            "round_off_debit_amount": 0.0,
+            "remark": None,
+            "base_currency": ctx.base_currency if ctx else 8,
+            "conversion_rate": 1.0,
+            "txn_currency_discount_amount": discount_total,
+            "grn_details": [],
+            "purchase_booking_details": pb_items,
         }
-        if ctx:
-            return build_pb_payload(
-                supplier_ref_id=supplier_ref_id,
-                supplier_ref_type=supplier_ref_type,
-                parameter1=ctx.parameter1,
-                parameter2=ctx.parameter2,
-                parameter5=ctx.parameter5,
-                parameter6=ctx.parameter6,
-                base_currency=ctx.base_currency,
-                txn_currency=ctx.txn_currency,
-                supplier_payment_terms_ref_id=ctx.pb_payment_terms,
-                items=pb_items,
-                qc_ref_id=qc_id,
-                grn_ref_id=grn_id,
-                po_ref_id=po_id,
-                **header_extra,
-                **overrides,
-            )
-        return build_pb_payload(
-            supplier_ref_id=supplier_ref_id,
-            supplier_ref_type=supplier_ref_type,
-            items=pb_items,
-            qc_ref_id=qc_id,
-            grn_ref_id=grn_id,
-            po_ref_id=po_id,
-            **header_extra,
-            **overrides,
-        )
+        payload.update(overrides or {})
+        return payload
 
     def _build_so_payload(
         self,
