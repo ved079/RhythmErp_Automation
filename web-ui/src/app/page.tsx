@@ -117,6 +117,7 @@ export default function Home() {
   const [sidebarModules, setSidebarModules] = useState<SidebarModule[]>([])
   const [apiModules, setApiModules] = useState<ApiModule[]>([])
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
+  const [qcSubTab, setQcSubTab] = useState<'formula' | 'crosscheck'>('formula')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [justExpandedId, setJustExpandedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('test-runner')
@@ -1022,9 +1023,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          {selectedModule === 'qc-formula-check' && (() => {
-            const [qcSubTab, setQcSubTab] = React.useState<'formula' | 'crosscheck'>('formula')
-            return (
+          {selectedModule === 'qc-formula-check' && (
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                 <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
                   <div className="flex items-center h-10 px-4 gap-0">
@@ -1063,8 +1062,7 @@ export default function Home() {
                   )}
                 </div>
               </div>
-            )
-          })()}
+          )}
           {selectedModule === 'credentials' && (
             <CredentialsScreen
               erpCredentials={erpCredentials}
