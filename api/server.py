@@ -678,6 +678,57 @@ def qc_list_endpoint(request: QCListRequest):
     print(f"[QC-LIST] returning {len(results)} records")
     return JSONResponse({"qcs": results})
 
+class PBFetchRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    pb_id: str
+
+@app.post("/api/pb-fetch")
+def pb_fetch_endpoint(request: PBFetchRequest):
+    """Fetch a Purchase Booking record by ID for cross-check validation."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    resp = client.session.get(
+        f"{client.BASE_URL}/procure_to_pay/purchase-booking/{request.pb_id}/",
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        return JSONResponse({"error": f"PB fetch failed: {resp.status_code}"}, status_code=resp.status_code)
+    return JSONResponse(resp.json())
+
+class PBByQCRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    qc_id: str
+
+@app.post("/api/pb-by-qc")
+def pb_by_qc_endpoint(request: PBByQCRequest):
+    """Find the Purchase Booking linked to a given QC id by scanning PB listing."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    qc_id = int(request.qc_id)
+    for page in range(1, 5):
+        resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/purchase-booking/",
+            params={"page": page, "limit": 50, "filters": "", "screen_name": "Purchase Booking", "search": ""},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            break
+        data = resp.json()
+        rows = data.get("screenmatlistingdata_set") or []
+        for r in rows:
+            if int(r.get("qc_ref_id_id") or -1) == qc_id:
+                pb_id = r.get("id") or r.get("pk")
+                if pb_id:
+                    detail = client.session.get(
+                        f"{client.BASE_URL}/procure_to_pay/purchase-booking/{pb_id}/",
+                        timeout=30,
+                    )
+                    if detail.status_code == 200:
+                        return JSONResponse(detail.json())
+        if not data.get("page_has_next"):
+            break
+    return JSONResponse({"error": "No Purchase Booking found for this QC"}, status_code=404)
+
 @app.post("/api/qc-fetch")
 def qc_fetch_endpoint(request: QCFetchRequest):
     """Fetch a Quality Check record by ID for formula validation."""

@@ -516,6 +516,17 @@ export async function fetchQCList(erpToken: string, erpTenantId: string): Promis
   return data.qcs ?? []
 }
 
+export async function fetchPBByQC(erpToken: string, erpTenantId: string, qcId: string): Promise<any> {
+  const res = await fetch(`${PROXY}?path=pb-by-qc`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, qc_id: qcId }),
+  }))
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function fetchQC(erpToken: string, erpTenantId: string, qcId: string): Promise<any> {
   const res = await fetch(`${PROXY}?path=qc-fetch`, withCsrf({
     method: 'POST',
