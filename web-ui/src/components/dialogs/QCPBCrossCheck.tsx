@@ -75,7 +75,6 @@ function buildCrossRows(qcLine: any, pbLine: any): CrossRow[] {
     row('deduction_weight',   'deduction_weight',            'alternate_deduction_weight',      qcLine.deduction_weight,                pbLine.alternate_deduction_weight),
     row('qc_deduction_amount','qc_deduction_amount',         'qc_deduction_amount',             qcLine.qc_deduction_amount,             pbLine.qc_deduction_amount),
     row('txn_without_discount','transaction_amount_without_discount','transaction_amount_without_discount', qcLine.transaction_amount_without_discount, pbLine.transaction_amount_without_discount),
-    row('net_txn_amount',     'txn_currency_amount',         'txn_currency_amount_detail',      qcLine.txn_currency_amount,             pbLine.txn_currency_amount_detail, 'PB stores 3dp'),
     row('net_purchase_rate',  'rate',                        'rate',                            qcLine.rate,                            pbLine.rate),
   ]
 }
