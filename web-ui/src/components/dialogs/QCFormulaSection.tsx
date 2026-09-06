@@ -88,18 +88,14 @@ function validateQCLine(line: any): CheckRow[] {
 
   const dedAmtFormula = isRateWeight ? 'stored_ded_wt × base_rate' : 'stored_rate × accepted_qty'
 
-  // deduction_percent = Σ(quantity_deduction) across all quality parameters
-  const paramDetails: any[] = line.qc_parameter_details ?? []
-  const sumParamDeductions = r(paramDetails.reduce((s: number, p: any) => s + parseFloat(p.quantity_deduction ?? 0), 0))
-
-  const paramSumCalc = paramDetails.map((p: any) => parseFloat(p.quantity_deduction ?? 0).toFixed(2)).join(' + ')
+  const stored_net_purchase_rate = parseFloat(line.rate ?? 0)
+  const exp_net_purchase_rate = accepted_qty > 0 ? r(txn_currency_amount / accepted_qty) : 0
 
   return [
     chk('total_amount', 'grn_qty × base_rate', `${grn_qty} kg × ₹${ind(base_rate)}`, total_amount, parseFloat(line.total_amount ?? 0)),
     chk('empty_bags_txn_amount', 'empty_bag_weight × base_rate', `${empty_bag_weight} kg × ₹${ind(base_rate)}`, empty_bags_txn_amount, parseFloat(line.empty_bags_txn_amount ?? 0)),
     chk('alternate_accepted_qty', 'grn_qty − empty_bag_weight', `${grn_qty} − ${empty_bag_weight} kg`, accepted_qty, parseFloat(line.alternate_accepted_qty ?? 0)),
     chk('net_of_empty_bag_amount', 'total_amount − empty_bags_txn_amount', `₹${ind(total_amount)} − ₹${ind(empty_bags_txn_amount)}`, net_of_empty_bag_amount, parseFloat(line.net_of_empty_bag_amount ?? 0)),
-    chk('deduction_percent', 'Σ(param quantity_deductions)', paramSumCalc, sumParamDeductions, deduction_percent),
     chk('deduction_weight', 'accepted_qty × ded% / 100', `${accepted_qty} × ${deduction_percent} / 100`, r(accepted_qty * deduction_percent / 100), stored_deduction_weight),
     chk('qc_deduction_rate', 'base_rate × ded% / 100', `₹${ind(base_rate)} × ${deduction_percent} / 100`, qc_deduction_rate, parseFloat(line.qc_deduction_rate ?? 0), 'ERP stores rounded to 4dp'),
     chk('qc_deduction_amount', dedAmtFormula,
@@ -119,6 +115,9 @@ function validateQCLine(line: any): CheckRow[] {
     chk('txn_currency_amount', 'purchase_before_CD − cash_discount',
       `₹${ind(net_of_empty_bag_amount)} − ₹${ind(r(stored_deduction_weight * base_rate))} − ₹${ind(cash_discount_amount)}`,
       txn_currency_amount, parseFloat(line.txn_currency_amount ?? 0), 'ERP stores rounded to 2dp'),
+    ...(accepted_qty > 0 ? [
+      chk('net_purchase_rate', 'txn_amount / accepted_qty', `₹${ind(txn_currency_amount)} / ${accepted_qty} kg`, exp_net_purchase_rate, stored_net_purchase_rate),
+    ] : []),
   ]
 }
 
@@ -150,6 +149,12 @@ function calcTieredDeduction(actualVal: number, allowable: number, ranges: CQPRa
     deduction,
     formulaStr: tierParts.length > 0 ? tierParts.join(' + ') : `excess(${actualVal}−${allowable}) × mult(0)`,
   }
+}
+
+// Returns null if all actual_values are zero (readings not entered — skip CQP check)
+function allReadingsZero(line: any): boolean {
+  const params: any[] = line.qc_parameter_details ?? []
+  return params.length > 0 && params.every(p => parseFloat(p.actual_value ?? 0) === 0)
 }
 
 function validateQCParams(line: any, cqpRanges: CQPRange[] | undefined): CheckRow[] {
@@ -390,12 +395,13 @@ function LineSection({ idx, line, qcRows, bagRows, paramRows, qcStart, bagStart,
   idx: number; line: any; qcRows: CheckRow[]; bagRows: CheckRow[]; paramRows: CheckRow[]
   qcStart: number; bagStart: number; paramStart: number; revealedCount: number; isFirst: boolean
 }) {
-  const lineAllOk = [...qcRows, ...bagRows, ...paramRows].every(r => r.ok)
+  const activeParamRows = allReadingsZero(line) ? [] : paramRows
+  const lineAllOk = [...qcRows, ...bagRows, ...activeParamRows].every(r => r.ok)
   const [open, setOpen] = useState(isFirst || !lineAllOk)
 
   useEffect(() => { if (!lineAllOk) setOpen(true) }, [lineAllOk])
 
-  const failCount = [...qcRows, ...bagRows, ...paramRows].filter(r => !r.ok).length
+  const failCount = [...qcRows, ...bagRows, ...activeParamRows].filter(r => !r.ok).length
   const specs = [
     { label: 'Item', value: `#${line.item_ref_id}` },
     { label: 'Rate', value: `₹${Number(line.base_rate).toLocaleString('en-IN')}` },
@@ -454,7 +460,14 @@ function LineSection({ idx, line, qcRows, bagRows, paramRows, qcStart, bagStart,
                 <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Quality parameters</span>
                 <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
               </div>
-              <ChecksTable rows={paramRows} revealStart={paramStart} revealedCount={revealedCount} />
+              {allReadingsZero(line) ? (
+                <div className="flex items-center gap-2 px-3 py-3 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  Readings not entered in ERP — CQP formula check skipped
+                </div>
+              ) : (
+                <ChecksTable rows={paramRows} revealStart={paramStart} revealedCount={revealedCount} />
+              )}
             </div>
           )}
         </div>
@@ -623,7 +636,8 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
   }, [qcData])
 
   const allOk = lines.length > 0 && lines.every(line => {
-    const rows = [...validateQCLine(line), ...validateBags(line)]
+    const paramRows = allReadingsZero(line) ? [] : validateQCParams(line, cqpMasters[String(line.item_ref_id)])
+    const rows = [...validateQCLine(line), ...validateBags(line), ...paramRows]
     return rows.every(r => r.ok)
   })
 
