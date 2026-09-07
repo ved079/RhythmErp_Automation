@@ -1182,10 +1182,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             <Label className="text-[11px] text-orange-600 dark:text-orange-400 mb-1.5 block font-medium">ERP Credentials</Label>
             <div className="flex items-center gap-2 mb-2">
               <Input
-                type="password"
+                type="text"
                 value={localToken}
                 onChange={(e) => setLocalToken(e.target.value)}
                 placeholder="Paste your Bearer token here..."
+                autoComplete="off"
+                style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
                 className={`h-9 text-[12px] flex-1 ${
                   localToken && (localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken).startsWith('eyJ') && localToken.split('.').length === 3 && localToken.length > 100
                     ? 'border-green-400'
@@ -1250,6 +1252,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 value={localTenantId}
                 onChange={(e) => setLocalTenantId(e.target.value)}
                 placeholder="Tenant ID (e.g. 708, 711)"
+                autoComplete="off"
                 className="h-9 text-[12px] w-48"
               />
               <Button

@@ -49,10 +49,12 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
             <label className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 block">Bearer Token</label>
             <div className="relative">
               <input
-                type={showToken ? 'text' : 'password'}
+                type="text"
                 value={erpToken}
                 onChange={e => setErpToken(e.target.value)}
                 placeholder="Bearer eyJ..."
+                autoComplete="off"
+                style={{ WebkitTextSecurity: showToken ? 'none' : 'disc' } as React.CSSProperties}
                 className={`pr-8 ${INPUT} ${tokenStatus === 'valid' ? 'border-green-400 dark:border-green-600' : tokenStatus !== 'empty' ? 'border-red-400 dark:border-red-600' : ''}`}
               />
               <button
@@ -96,6 +98,7 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
               value={erpTenantId}
               onChange={e => setErpTenantId(e.target.value)}
               placeholder="e.g. 681"
+              autoComplete="off"
               className={INPUT}
             />
           </div>
