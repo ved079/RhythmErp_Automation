@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X, Eye } from 'lucide-react'
-import { fetchQCList, fetchQC, type QCListItem } from '@/lib/api'
-import { fetchPBByQC } from '@/lib/api'
+import { fetchQC } from '@/lib/api'
+import { fetchPBList, fetchPBById, type PBCrossListItem } from '@/lib/api'
+
 import { useErpToken } from '@/hooks/useErpToken'
 import LoadingCard from '@/components/ui/LoadingCard'
 
@@ -51,6 +52,12 @@ function fmtVal(v: number | string): string {
 
 function numClose(a: number | string, b: number | string): boolean {
   return Math.abs(Number(a) - Number(b)) <= TOLERANCE
+}
+
+// Match PB lines to QC lines by item_ref_id; fall back to positional if no match found
+function matchPBLine(pbLines: any[], qcLine: any, fallbackIdx: number): any {
+  const match = pbLines.find(pb => String(pb.item_ref_id) === String(qcLine.item_ref_id))
+  return match ?? pbLines[fallbackIdx] ?? {}
 }
 
 // ── Build cross-check rows from QC + PB line pairs ───────────────────────────
@@ -322,7 +329,7 @@ function HeaderCrossTable({ qcData, pbData }: { qcData: any; pbData: any }) {
 }
 
 type BulkCrossResult = {
-  qc: QCListItem
+  pb: PBCrossListItem
   ok: boolean
   error?: string
   failCount?: number
@@ -341,8 +348,9 @@ function countCrossCheckFails(qcData: any, pbData: any): number {
   const qcLines: any[] = qcData.qc_details ?? []
   const pbLines: any[] = pbData.purchase_booking_details ?? []
   for (let i = 0; i < qcLines.length; i++) {
-    const crossRows = buildCrossRows(qcLines[i], pbLines[i] ?? {})
-    const pbCheckRows = buildPBChecks(pbData, pbLines[i] ?? {})
+    const pbLine = matchPBLine(pbLines, qcLines[i], i)
+    const crossRows = buildCrossRows(qcLines[i], pbLine)
+    const pbCheckRows = buildPBChecks(pbData, pbLine)
     fails += [...crossRows, ...pbCheckRows].filter(r => !r.ok).length
   }
   return fails
@@ -353,25 +361,23 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const { token, tenantId, localToken, setLocalToken, localTenantId, setLocalTenantId, handleAuthError } = useErpToken(erpToken, erpTenantId)
 
   const [showTokenInput, setShowTokenInput] = useState(false)
-  const [qcList, setQcList] = useState<QCListItem[]>([])
+  const [pbList, setPbList] = useState<PBCrossListItem[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
   const [search, setSearch] = useState('')
 
-  const [selectedQC, setSelectedQC] = useState<QCListItem | null>(null)
+  const [selectedPB, setSelectedPB] = useState<PBCrossListItem | null>(null)
   const [showList, setShowList] = useState(true)
   const [qcData, setQcData] = useState<any>(null)
   const [pbData, setPbData] = useState<any>(null)
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
-  const [pbLoading, setPbLoading] = useState(false)
-  const [pbError, setPbError] = useState('')
 
   const [revealedCount, setRevealedCount] = useState(0)
 
   // Multi-select / bulk run state
-  const [multiSelectQC, setMultiSelectQC] = useState(false)
-  const [selectedQCIds, setSelectedQCIds] = useState<Set<string | number>>(new Set())
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set())
   const [bulkResults, setBulkResults] = useState<BulkCrossResult[]>([])
   const [bulkRunning, setBulkRunning] = useState(false)
   const [bulkProgress, setBulkProgress] = useState(0)
@@ -388,7 +394,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
     if (!token || !tenantId) return
     setListLoading(true); setListError('')
     try {
-      setQcList(await fetchQCList(token, tenantId))
+      setPbList(await fetchPBList(token, tenantId))
     } catch (err) {
       if (!handleAuthError(err)) setListError(err instanceof Error ? err.message : String(err))
     } finally { setListLoading(false) }
@@ -399,51 +405,50 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const hasToken = !!token && !!tenantId
   useEffect(() => { if (!hasToken) return; loadListRef.current() }, [hasToken])
 
-  const handleSelect = async (qc: QCListItem) => {
-    setSelectedQC(qc); setShowList(false)
-    setFetching(true); setFetchError(''); setQcData(null); setPbData(null); setPbError('')
+  // Fetch both PB detail and QC detail for a selected PB listing row
+  const handleSelect = async (pb: PBCrossListItem) => {
+    setSelectedPB(pb); setShowList(false)
+    setFetching(true); setFetchError(''); setQcData(null); setPbData(null)
     try {
-      const data = await fetchQC(token!, tenantId, String(qc.id))
-      if (data.error) throw new Error(data.error)
-      setQcData(data)
-      setPbLoading(true)
-      fetchPBByQC(token!, tenantId, String(qc.id), qc.ref_no)
-        .then(pb => {
-          if (!pb) setPbError('No Purchase Booking found for this QC')
-          else if (pb.error) setPbError(pb.error)
-          else setPbData(pb)
-        })
-        .catch(err => setPbError(err instanceof Error ? err.message : String(err)))
-        .finally(() => setPbLoading(false))
+      const pbDetail = await fetchPBById(token!, tenantId, String(pb.id))
+      if (pbDetail.error) throw new Error(pbDetail.error)
+      setPbData(pbDetail)
+      const qcNumericId = pbDetail.qc_ref_id_id
+      if (!qcNumericId) throw new Error('PB has no linked QC id')
+      const qcDetail = await fetchQC(token!, tenantId, String(qcNumericId))
+      if (qcDetail.error) throw new Error(qcDetail.error)
+      setQcData(qcDetail)
     } catch (err) {
       if (!handleAuthError(err)) setFetchError(err instanceof Error ? err.message : String(err))
     } finally { setFetching(false) }
   }
 
   const handleBulkRun = async () => {
-    if (!token || !tenantId || selectedQCIds.size === 0) return
-    const selected = qcList.filter(qc => selectedQCIds.has(qc.id ?? qc.ref_no))
+    if (!token || !tenantId || selectedIds.size === 0) return
+    const selected = pbList.filter(pb => selectedIds.has(pb.id ?? pb.ref_no))
     bulkAbort.current = false
     bulkRowRefs.current = []
     setBulkRunning(true)
     setBulkProgress(0)
     setBulkOpen(true)
-    const results: BulkCrossResult[] = selected.map(qc => ({ qc, ok: false, done: false }))
+    const results: BulkCrossResult[] = selected.map(pb => ({ pb, ok: false, done: false }))
     setBulkResults([...results])
     setTimeout(() => bulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
     for (let i = 0; i < selected.length; i++) {
       if (bulkAbort.current) break
       setTimeout(() => bulkRowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
-      const qc = selected[i]
+      const pb = selected[i]
       try {
-        const qcDetail = await fetchQC(token!, tenantId, String(qc.id))
+        const pbDetail = await fetchPBById(token!, tenantId, String(pb.id))
+        if (pbDetail.error) throw new Error(pbDetail.error)
+        const qcNumericId = pbDetail.qc_ref_id_id
+        if (!qcNumericId) throw new Error('No QC linked')
+        const qcDetail = await fetchQC(token!, tenantId, String(qcNumericId))
         if (qcDetail.error) throw new Error(qcDetail.error)
-        const pb = await fetchPBByQC(token!, tenantId, String(qc.id), qc.ref_no)
-        if (!pb || pb.error) throw new Error(pb?.error ?? 'No PB found')
-        const failCount = countCrossCheckFails(qcDetail, pb)
-        results[i] = { qc, ok: failCount === 0, failCount, done: true, qcData: qcDetail, pbData: pb }
+        const failCount = countCrossCheckFails(qcDetail, pbDetail)
+        results[i] = { pb, ok: failCount === 0, failCount, done: true, qcData: qcDetail, pbData: pbDetail }
       } catch (err) {
-        results[i] = { qc, ok: false, error: err instanceof Error ? err.message : String(err), done: true }
+        results[i] = { pb, ok: false, error: err instanceof Error ? err.message : String(err), done: true }
       }
       setBulkResults([...results])
       setBulkProgress(i + 1)
@@ -451,9 +456,9 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
     setBulkRunning(false)
   }
 
-  const filtered = qcList.filter(qc => {
+  const filtered = pbList.filter(pb => {
     const q = search.toLowerCase()
-    return !q || qc.ref_no.toLowerCase().includes(q) || qc.supplier.toLowerCase().includes(q)
+    return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) || pb.qc_ref.toLowerCase().includes(q)
   })
 
   const sortedBulkResults = [...bulkResults].sort((a, b) => {
@@ -469,7 +474,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const pbLines: any[] = pbData?.purchase_booking_details ?? []
 
   const allSections = qcLines.map((qcLine, i) => {
-    const pbLine = pbLines[i] ?? {}
+    const pbLine = matchPBLine(pbLines, qcLine, i)
     const crossRows = buildCrossRows(qcLine, pbLine)
     const pbCheckRows = buildPBChecks(pbData ?? {}, pbLine)
     return { qcLine, pbLine, crossRows, pbCheckRows }
@@ -500,8 +505,10 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
             <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
               <Label className="text-[11px] text-orange-600 dark:text-orange-400 mb-1.5 block font-medium">ERP Credentials</Label>
               <div className="flex items-center gap-2 mb-2">
-                <Input type="password" value={localToken} onChange={e => setLocalToken(e.target.value)}
+                <Input type="text" value={localToken} onChange={e => setLocalToken(e.target.value)}
                   placeholder="Paste your Bearer token here..."
+                  autoComplete="off"
+                  style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
                   className={`h-9 text-[12px] flex-1 ${localToken && localToken.length > 100 ? 'border-green-400' : localToken ? 'border-red-400' : ''}`} />
               </div>
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -513,7 +520,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <Input type="text" value={localTenantId} onChange={e => setLocalTenantId(e.target.value)} placeholder="Tenant ID" className="h-9 text-[12px] w-36" />
+                <Input type="text" value={localTenantId} onChange={e => setLocalTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" className="h-9 text-[12px] w-36" />
                 <Button onClick={() => { setShowTokenInput(false); loadList() }} variant="ghost" size="sm" className="h-9 text-[12px] cursor-pointer">Done</Button>
               </div>
             </div>
@@ -524,30 +531,30 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
         {!showTokenInput && (
           <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-3">
             {listError && <p className="text-[11px] text-red-500">{listError}</p>}
-            {listLoading && qcList.length === 0 && (
-              <LoadingCard message="FETCHING" steps={[{ label: 'Fetching quality checks', done: false }]} />
+            {listLoading && pbList.length === 0 && (
+              <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings with linked QC', done: false }]} />
             )}
-            {!listLoading && qcList.length === 0 && !listError && (
-              <p className="text-[12px] text-gray-400 py-2">No QC records found. Click Refresh or check your token.</p>
+            {!listLoading && pbList.length === 0 && !listError && (
+              <p className="text-[12px] text-gray-400 py-2">No Purchase Bookings with a linked QC found. Click Refresh or check your token.</p>
             )}
 
-            {/* QC list */}
-            {qcList.length > 0 && showList && (
+            {/* PB list */}
+            {pbList.length > 0 && showList && (
               <>
                 <div className="flex items-center justify-between">
-                  <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Quality Check to cross-check with PB</Label>
+                  <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking to cross-check</Label>
                   <button
-                    onClick={() => { setMultiSelectQC(v => !v); setSelectedQCIds(new Set()); setBulkResults([]); setBulkOpen(false) }}
-                    className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${multiSelectQC ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
+                    onClick={() => { setMultiSelect(v => !v); setSelectedIds(new Set()); setBulkResults([]); setBulkOpen(false) }}
+                    className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${multiSelect ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
                     <ListChecks className="size-3" /> Multi-select
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] flex-1" />
-                  {multiSelectQC && (() => {
-                    const allSel = filtered.length > 0 && filtered.every(qc => selectedQCIds.has(qc.id ?? qc.ref_no))
+                  <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by PB ref, QC ref or supplier…" className="h-8 text-[12px] flex-1" />
+                  {multiSelect && (() => {
+                    const allSel = filtered.length > 0 && filtered.every(pb => selectedIds.has(pb.id ?? pb.ref_no))
                     return (
-                      <button onClick={() => allSel ? setSelectedQCIds(new Set()) : setSelectedQCIds(new Set(filtered.map(qc => qc.id ?? qc.ref_no)))}
+                      <button onClick={() => allSel ? setSelectedIds(new Set()) : setSelectedIds(new Set(filtered.map(pb => pb.id ?? pb.ref_no)))}
                         className="text-[11px] flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5] transition-colors cursor-pointer shrink-0">
                         {allSel ? <CheckSquare className="size-3.5 text-[#3F51B5]" /> : <Square className="size-3.5" />}
                         {allSel ? 'Deselect all' : 'Select all'}
@@ -556,30 +563,29 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                   })()}
                 </div>
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                  {filtered.map((qc, i) => {
-                    const qcKey = qc.id ?? qc.ref_no
-                    const checked = selectedQCIds.has(qcKey)
+                  {filtered.map((pb, i) => {
+                    const pbKey = pb.id ?? pb.ref_no
+                    const checked = selectedIds.has(pbKey)
                     return (
-                      <div key={qc.id ?? i}
-                        onClick={multiSelectQC ? () => setSelectedQCIds(prev => { const n = new Set(prev); n.has(qcKey) ? n.delete(qcKey) : n.add(qcKey); return n }) : undefined}
-                        className={`flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors ${multiSelectQC ? 'cursor-pointer' : ''} ${checked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : ''}`}>
-                        {multiSelectQC && (
-                          <button onClick={e => { e.stopPropagation(); setSelectedQCIds(prev => { const n = new Set(prev); n.has(qcKey) ? n.delete(qcKey) : n.add(qcKey); return n }) }}
+                      <div key={pb.id ?? i}
+                        onClick={multiSelect ? () => setSelectedIds(prev => { const n = new Set(prev); n.has(pbKey) ? n.delete(pbKey) : n.add(pbKey); return n }) : undefined}
+                        className={`flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors ${multiSelect ? 'cursor-pointer' : ''} ${checked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : ''}`}>
+                        {multiSelect && (
+                          <button onClick={e => { e.stopPropagation(); setSelectedIds(prev => { const n = new Set(prev); n.has(pbKey) ? n.delete(pbKey) : n.add(pbKey); return n }) }}
                             className="mt-0.5 shrink-0 cursor-pointer text-[#3F51B5]">
                             {checked ? <CheckSquare className="size-3.5" /> : <Square className="size-3.5 text-gray-300 dark:text-gray-600" />}
                           </button>
                         )}
-                        <button onClick={() => handleSelect(qc)} className="flex-1 text-left cursor-pointer">
+                        <button onClick={() => handleSelect(pb)} className="flex-1 text-left cursor-pointer">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{qc.ref_no}</span>
-                            {qc.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(qc.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                            {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
                           </div>
-                          {qc.supplier && (
-                            <div className="mt-0.5 flex items-center justify-between gap-2">
-                              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{qc.supplier}</span>
-                              {qc.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{qc.date}</span>}
-                            </div>
-                          )}
+                          <div className="mt-0.5 flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                            <span className="text-[10px] text-purple-400 dark:text-purple-500 shrink-0 font-mono">{pb.qc_ref}</span>
+                          </div>
+                          {pb.date && <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{pb.date}</div>}
                         </button>
                       </div>
                     )
@@ -587,14 +593,14 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                 </div>
 
                 {/* Bulk action bar */}
-                {multiSelectQC && selectedQCIds.size > 0 && (
+                {multiSelect && selectedIds.size > 0 && (
                   <div ref={bulkRunBtnRef} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#3F51B5]/5 border border-[#3F51B5]/20">
-                    <span className="text-[12px] text-[#3F51B5] dark:text-[#7986CB] font-semibold">{selectedQCIds.size} QC{selectedQCIds.size > 1 ? 's' : ''} selected</span>
+                    <span className="text-[12px] text-[#3F51B5] dark:text-[#7986CB] font-semibold">{selectedIds.size} PB{selectedIds.size > 1 ? 's' : ''} selected</span>
                     <div className="flex items-center gap-2">
                       {bulkRunning ? (
                         <div className="flex items-center gap-2">
                           <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" />
-                          <span className="text-[11px] text-gray-500">{bulkProgress} / {selectedQCIds.size}</span>
+                          <span className="text-[11px] text-gray-500">{bulkProgress} / {selectedIds.size}</span>
                           <button onClick={() => { bulkAbort.current = true }} className="text-[11px] text-red-500 hover:underline cursor-pointer">Stop</button>
                         </div>
                       ) : (
@@ -608,7 +614,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                 {/* Progress bar */}
                 {bulkRunning && (
                   <div className="h-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                    <div className="h-full bg-[#3F51B5] transition-all duration-300 rounded-full" style={{ width: `${(bulkProgress / selectedQCIds.size) * 100}%` }} />
+                    <div className="h-full bg-[#3F51B5] transition-all duration-300 rounded-full" style={{ width: `${(bulkProgress / selectedIds.size) * 100}%` }} />
                   </div>
                 )}
                 {/* Bulk results */}
@@ -630,8 +636,8 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{r.qc.ref_no}</span>
-                              <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{r.qc.supplier}</span>
+                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{r.pb.ref_no}</span>
+                              <span className="text-[10px] text-purple-400 dark:text-purple-500 font-mono truncate">{r.pb.qc_ref}</span>
                             </div>
                             {r.done && !r.ok && (
                               <div className="text-[10px] text-red-500 dark:text-red-400 mt-0.5 truncate">
@@ -643,12 +649,11 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                             <button onClick={() => {
                               bulkFromView.current = true
                               bulkViewIndex.current = i
-                              setSelectedQC(r.qc)
+                              setSelectedPB(r.pb)
                               setShowList(false)
                               setQcData(r.qcData)
                               setPbData(r.pbData)
                               setFetchError('')
-                              setPbError('')
                             }} className="text-[10px] text-[#3F51B5] hover:underline shrink-0 cursor-pointer flex items-center gap-0.5">
                               <Eye className="size-3" />View
                             </button>
@@ -662,7 +667,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
             )}
 
             {/* Results */}
-            {!showList && selectedQC && (
+            {!showList && selectedPB && (
               <div className="space-y-4">
                 {/* Nav */}
                 <div className="flex items-center gap-2">
@@ -670,7 +675,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                     <button onClick={() => {
                       const idx = bulkViewIndex.current
                       bulkFromView.current = false
-                      setShowList(true); setQcData(null); setPbData(null); setSelectedQC(null); setFetchError(''); setPbError('')
+                      setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError('')
                       setTimeout(() => {
                         bulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
                         setTimeout(() => bulkRowRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
@@ -679,12 +684,12 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                       ← Back to results
                     </button>
                   ) : (
-                    <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedQC(null); setFetchError(''); setPbError('') }}
+                    <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError('') }}
                       className="flex items-center gap-1 text-[11px] h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:text-[#3F51B5] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
                       <RefreshCw className="size-3" /> Change
                     </button>
                   )}
-                  {!fetching && !pbLoading && qcData && pbData && (
+                  {!fetching && qcData && pbData && (
                     <span className={`flex items-center gap-1 text-[11px] font-medium ${allOk ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {allOk ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
                       {allOk ? 'QC ↔ PB fully consistent' : 'Discrepancies found'}
@@ -692,27 +697,26 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                   )}
                 </div>
 
-                {/* QC + PB header */}
+                {/* QC + PB header cards */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 p-3 bg-blue-50/40 dark:bg-blue-900/10">
+                  <div className={`rounded-lg border p-3 ${qcData ? 'border-blue-200 dark:border-blue-800/50 bg-blue-50/40 dark:bg-blue-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20'}`}>
                     <div className="text-[9px] font-bold uppercase tracking-widest text-blue-400 mb-1">QC</div>
-                    <div className="font-mono font-bold text-[13px] text-gray-800 dark:text-gray-100">{selectedQC.ref_no}</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">{selectedQC.date} · {selectedQC.supplier}</div>
-                    {qcData && <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 mt-1">₹{Number(qcData.total_txn_currency_amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>}
-                  </div>
-                  <div className={`rounded-lg border p-3 ${pbData ? 'border-purple-200 dark:border-purple-800/50 bg-purple-50/40 dark:bg-purple-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20'}`}>
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-purple-400 mb-1">PB</div>
-                    {pbLoading && <div className="flex items-center gap-1.5 text-[11px] text-gray-400"><Loader2 className="size-3 animate-spin" />Finding linked PB…</div>}
-                    {pbError && <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400"><AlertTriangle className="size-3" />{pbError}</div>}
-                    {pbData && <>
-                      <div className="font-mono font-bold text-[13px] text-gray-800 dark:text-gray-100">{pbData.transaction_ref_no}</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">{pbData.transaction_date}</div>
-                      <div className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mt-1">₹{Number(pbData.txn_currency_total_amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                    {fetching && <div className="flex items-center gap-1.5 text-[11px] text-gray-400"><Loader2 className="size-3 animate-spin" />Fetching…</div>}
+                    {qcData && <>
+                      <div className="font-mono font-bold text-[13px] text-gray-800 dark:text-gray-100">{qcData.transaction_ref_no}</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{qcData.transaction_date}</div>
+                      <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 mt-1">₹{Number(qcData.total_txn_currency_amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
                     </>}
+                  </div>
+                  <div className="rounded-lg border border-purple-200 dark:border-purple-800/50 p-3 bg-purple-50/40 dark:bg-purple-900/10">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-purple-400 mb-1">PB</div>
+                    <div className="font-mono font-bold text-[13px] text-gray-800 dark:text-gray-100">{selectedPB.ref_no}</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{selectedPB.date}</div>
+                    {pbData && <div className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mt-1">₹{Number(pbData.txn_currency_total_amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>}
                   </div>
                 </div>
 
-                {fetching && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching QC detail', done: false }]} />}
+                {fetching && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching PB and linked QC', done: false }]} />}
                 {fetchError && <div className="flex items-center gap-2 text-[12px] text-red-600"><AlertTriangle className="w-4 h-4 shrink-0" />{fetchError}</div>}
 
                 {qcData && pbData && (
@@ -730,10 +734,6 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                       )
                     })}
                   </>
-                )}
-
-                {qcData && !pbLoading && !pbData && !pbError && (
-                  <div className="text-[12px] text-gray-400 py-2">No PB linked to this QC yet.</div>
                 )}
               </div>
             )}

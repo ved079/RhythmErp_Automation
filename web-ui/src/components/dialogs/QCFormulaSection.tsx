@@ -28,6 +28,7 @@ interface CheckRow {
 }
 
 const TOLERANCE = 0.05
+const STRICT_TOLERANCE = 0.001
 
 function r(v: number, dp = 6) { return Math.round(v * 10 ** dp) / 10 ** dp }
 function ind(n: number) { return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }) }
@@ -42,6 +43,11 @@ function fmtVal(v: number): string {
 function chk(field: string, formula: string, calc: string | undefined, expected: number, actual: number, note?: string): CheckRow {
   // NaN expected = CQP not yet loaded; treat as pending (ok=true so it doesn't inflate fail count)
   return { field, formula, calc, expected, actual, ok: isNaN(expected) || Math.abs(expected - actual) <= TOLERANCE, note }
+}
+
+// Strict check: deduction_weight uses accepted_qty (not grn_qty) — formula choice, not rounding
+function schk(field: string, formula: string, calc: string | undefined, expected: number, actual: number, note?: string): CheckRow {
+  return { field, formula, calc, expected, actual, ok: isNaN(expected) || Math.abs(expected - actual) <= STRICT_TOLERANCE, note }
 }
 
 function validateQCLine(line: any): CheckRow[] {
@@ -96,7 +102,7 @@ function validateQCLine(line: any): CheckRow[] {
     chk('empty_bags_txn_amount', 'empty_bag_weight × base_rate', `${empty_bag_weight} kg × ₹${ind(base_rate)}`, empty_bags_txn_amount, parseFloat(line.empty_bags_txn_amount ?? 0)),
     chk('alternate_accepted_qty', 'grn_qty − empty_bag_weight', `${grn_qty} − ${empty_bag_weight} kg`, accepted_qty, parseFloat(line.alternate_accepted_qty ?? 0)),
     chk('net_of_empty_bag_amount', 'total_amount − empty_bags_txn_amount', `₹${ind(total_amount)} − ₹${ind(empty_bags_txn_amount)}`, net_of_empty_bag_amount, parseFloat(line.net_of_empty_bag_amount ?? 0)),
-    chk('deduction_weight', 'accepted_qty × ded% / 100', `${accepted_qty} × ${deduction_percent} / 100`, r(accepted_qty * deduction_percent / 100), stored_deduction_weight),
+    schk('deduction_weight', 'accepted_qty × ded% / 100', `${accepted_qty} × ${deduction_percent} / 100`, r(accepted_qty * deduction_percent / 100), stored_deduction_weight),
     chk('qc_deduction_rate', 'base_rate × ded% / 100', `₹${ind(base_rate)} × ${deduction_percent} / 100`, qc_deduction_rate, parseFloat(line.qc_deduction_rate ?? 0), 'ERP stores rounded to 4dp'),
     chk('qc_deduction_amount', dedAmtFormula,
       isRateWeight ? `${stored_deduction_weight} × ₹${ind(base_rate)}` : `₹${ind(stored_qc_deduction_rate)} × ${accepted_qty} kg`,
@@ -652,10 +658,12 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
               <Label className="text-[11px] text-orange-600 dark:text-orange-400 mb-1.5 block font-medium">ERP Credentials</Label>
               <div className="flex items-center gap-2 mb-2">
                 <Input
-                  type="password"
+                  type="text"
                   value={localToken}
                   onChange={e => setLocalToken(e.target.value)}
                   placeholder="Paste your Bearer token here..."
+                  autoComplete="off"
+                  style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
                   className={`h-9 text-[12px] flex-1 ${localToken && localToken.length > 100 ? 'border-green-400' : localToken ? 'border-red-400' : ''}`}
                 />
               </div>
@@ -673,7 +681,7 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <Input type="text" value={localTenantId} onChange={e => setLocalTenantId(e.target.value)} placeholder="Tenant ID" className="h-9 text-[12px] w-36" />
+                <Input type="text" value={localTenantId} onChange={e => setLocalTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" className="h-9 text-[12px] w-36" />
                 <Button onClick={() => { setShowTokenInput(false); loadList() }} variant="ghost" size="sm" className="h-9 text-[12px] cursor-pointer">Done</Button>
               </div>
               <p className="text-[11px] text-orange-500 dark:text-orange-400 mt-1.5">Credentials stay in your browser session. Clear below to reset.</p>

@@ -467,17 +467,6 @@ export interface PBItemLine {
   gst_type?: string;
 }
 
-export async function fetchPBList(erpToken: string, erpTenantId: string): Promise<PBListItem[]> {
-  const res = await fetch(`${PROXY}?path=pb-list`, withCsrf({
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
-  }))
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json()
-  return data.pbs ?? []
-}
-
 export interface PBItemsResult {
   items: PBItemLine[];
   taxable_amount: number | null;
@@ -514,6 +503,36 @@ export async function fetchQCList(erpToken: string, erpTenantId: string): Promis
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.qcs ?? []
+}
+
+export interface PBCrossListItem {
+  id: string | number
+  ref_no: string
+  date: string
+  supplier: string
+  amount: string
+  qc_ref: string
+}
+
+export async function fetchPBList(erpToken: string, erpTenantId: string): Promise<PBCrossListItem[]> {
+  const res = await fetch(`${PROXY}?path=pb-list`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
+  }))
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.pbs ?? []
+}
+
+export async function fetchPBById(erpToken: string, erpTenantId: string, pbId: string): Promise<any> {
+  const res = await fetch(`${PROXY}?path=pb-fetch`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_id: pbId }),
+  }))
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
 }
 
 export async function fetchPBByQC(erpToken: string, erpTenantId: string, qcId: string, qcRefNo?: string): Promise<any> {

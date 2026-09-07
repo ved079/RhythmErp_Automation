@@ -678,6 +678,42 @@ def qc_list_endpoint(request: QCListRequest):
     print(f"[QC-LIST] returning {len(results)} records")
     return JSONResponse({"qcs": results})
 
+class PBListRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+
+@app.post("/api/pb-list")
+def pb_list_endpoint(request: PBListRequest):
+    """List Purchase Bookings that have a linked QC (qc_ref_id_id is set)."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    results = []
+    for page in range(1, 5):
+        resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/purchase-booking/",
+            params={"page": page, "limit": 50, "filters": "", "screen_name": "Purchase Booking", "search": ""},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            break
+        data = resp.json()
+        rows = data.get("screenmatlistingdata_set") or []
+        for r in rows:
+            ref = r.get("transaction_ref_no") or ""
+            qc_ref = r.get("qc_ref_id_id") or ""
+            if not ref or not qc_ref:
+                continue  # skip PBs without a linked QC
+            results.append({
+                "id": r.get("id") or r.get("pk") or "",
+                "ref_no": ref,
+                "date": r.get("transaction_date") or "",
+                "supplier": r.get("supplier_ref_id") or "",
+                "amount": r.get("txn_currency_amount") or r.get("total_txn_currency_amount") or "",
+                "qc_ref": str(qc_ref),
+            })
+        if not data.get("page_has_next"):
+            break
+    return JSONResponse({"pbs": results})
+
 class PBFetchRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str
