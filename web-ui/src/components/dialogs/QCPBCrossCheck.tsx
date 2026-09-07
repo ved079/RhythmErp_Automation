@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X, Eye } from 'lucide-react'
 import { fetchQCList, fetchQC, type QCListItem } from '@/lib/api'
 import { fetchPBByQC } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
@@ -321,6 +321,33 @@ function HeaderCrossTable({ qcData, pbData }: { qcData: any; pbData: any }) {
   )
 }
 
+type BulkCrossResult = {
+  qc: QCListItem
+  ok: boolean
+  error?: string
+  failCount?: number
+  done: boolean
+  qcData?: any
+  pbData?: any
+}
+
+function countCrossCheckFails(qcData: any, pbData: any): number {
+  const headerRows = [
+    { qcVal: qcData.supplier_ref_id, pbVal: pbData.supplier_ref_id },
+    { qcVal: qcData.grn_ref_id_id,   pbVal: pbData.grn_ref_id_id },
+    { qcVal: qcData.po_ref_id_id,    pbVal: pbData.po_ref_id_id },
+  ]
+  let fails = headerRows.filter(r => String(r.qcVal) !== String(r.pbVal)).length
+  const qcLines: any[] = qcData.qc_details ?? []
+  const pbLines: any[] = pbData.purchase_booking_details ?? []
+  for (let i = 0; i < qcLines.length; i++) {
+    const crossRows = buildCrossRows(qcLines[i], pbLines[i] ?? {})
+    const pbCheckRows = buildPBChecks(pbData, pbLines[i] ?? {})
+    fails += [...crossRows, ...pbCheckRows].filter(r => !r.ok).length
+  }
+  return fails
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
   const { token, tenantId, localToken, setLocalToken, localTenantId, setLocalTenantId, handleAuthError } = useErpToken(erpToken, erpTenantId)
@@ -341,6 +368,21 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const [pbError, setPbError] = useState('')
 
   const [revealedCount, setRevealedCount] = useState(0)
+
+  // Multi-select / bulk run state
+  const [multiSelectQC, setMultiSelectQC] = useState(false)
+  const [selectedQCIds, setSelectedQCIds] = useState<Set<string | number>>(new Set())
+  const [bulkResults, setBulkResults] = useState<BulkCrossResult[]>([])
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(0)
+  const [bulkOpen, setBulkOpen] = useState(false)
+
+  const bulkResultsRef = useRef<HTMLDivElement>(null)
+  const bulkRowRefs = useRef<(HTMLDivElement | null)[]>([])
+  const bulkRunBtnRef = useRef<HTMLDivElement>(null)
+  const bulkAbort = useRef(false)
+  const bulkFromView = useRef(false)
+  const bulkViewIndex = useRef(0)
 
   const loadList = useCallback(async () => {
     if (!token || !tenantId) return
@@ -378,9 +420,48 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
     } finally { setFetching(false) }
   }
 
+  const handleBulkRun = async () => {
+    if (!token || !tenantId || selectedQCIds.size === 0) return
+    const selected = qcList.filter(qc => selectedQCIds.has(qc.id ?? qc.ref_no))
+    bulkAbort.current = false
+    bulkRowRefs.current = []
+    setBulkRunning(true)
+    setBulkProgress(0)
+    setBulkOpen(true)
+    const results: BulkCrossResult[] = selected.map(qc => ({ qc, ok: false, done: false }))
+    setBulkResults([...results])
+    setTimeout(() => bulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
+    for (let i = 0; i < selected.length; i++) {
+      if (bulkAbort.current) break
+      setTimeout(() => bulkRowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+      const qc = selected[i]
+      try {
+        const qcDetail = await fetchQC(token!, tenantId, String(qc.id))
+        if (qcDetail.error) throw new Error(qcDetail.error)
+        const pb = await fetchPBByQC(token!, tenantId, String(qc.id), qc.ref_no)
+        if (!pb || pb.error) throw new Error(pb?.error ?? 'No PB found')
+        const failCount = countCrossCheckFails(qcDetail, pb)
+        results[i] = { qc, ok: failCount === 0, failCount, done: true, qcData: qcDetail, pbData: pb }
+      } catch (err) {
+        results[i] = { qc, ok: false, error: err instanceof Error ? err.message : String(err), done: true }
+      }
+      setBulkResults([...results])
+      setBulkProgress(i + 1)
+    }
+    setBulkRunning(false)
+  }
+
   const filtered = qcList.filter(qc => {
     const q = search.toLowerCase()
     return !q || qc.ref_no.toLowerCase().includes(q) || qc.supplier.toLowerCase().includes(q)
+  })
+
+  const sortedBulkResults = [...bulkResults].sort((a, b) => {
+    if (!a.done && b.done) return 1
+    if (a.done && !b.done) return -1
+    if (a.ok && !b.ok) return 1
+    if (!a.ok && b.ok) return -1
+    return 0
   })
 
   // Build all rows for reveal animation
@@ -447,33 +528,136 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
               <LoadingCard message="FETCHING" steps={[{ label: 'Fetching quality checks', done: false }]} />
             )}
             {!listLoading && qcList.length === 0 && !listError && (
-              <p className="text-[12px] text-gray-400 py-2">No QC records found.</p>
+              <p className="text-[12px] text-gray-400 py-2">No QC records found. Click Refresh or check your token.</p>
             )}
 
             {/* QC list */}
             {qcList.length > 0 && showList && (
               <>
-                <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Quality Check to cross-check with PB</Label>
-                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px]" />
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                  {filtered.map((qc, i) => (
-                    <button key={qc.id ?? i} onClick={() => handleSelect(qc)}
-                      className="w-full flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors text-left cursor-pointer">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{qc.ref_no}</span>
-                          {qc.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(qc.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
-                        </div>
-                        {qc.supplier && (
-                          <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{qc.supplier}</span>
-                            {qc.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{qc.date}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Quality Check to cross-check with PB</Label>
+                  <button
+                    onClick={() => { setMultiSelectQC(v => !v); setSelectedQCIds(new Set()); setBulkResults([]); setBulkOpen(false) }}
+                    className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${multiSelectQC ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
+                    <ListChecks className="size-3" /> Multi-select
+                  </button>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] flex-1" />
+                  {multiSelectQC && (() => {
+                    const allSel = filtered.length > 0 && filtered.every(qc => selectedQCIds.has(qc.id ?? qc.ref_no))
+                    return (
+                      <button onClick={() => allSel ? setSelectedQCIds(new Set()) : setSelectedQCIds(new Set(filtered.map(qc => qc.id ?? qc.ref_no)))}
+                        className="text-[11px] flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5] transition-colors cursor-pointer shrink-0">
+                        {allSel ? <CheckSquare className="size-3.5 text-[#3F51B5]" /> : <Square className="size-3.5" />}
+                        {allSel ? 'Deselect all' : 'Select all'}
+                      </button>
+                    )
+                  })()}
+                </div>
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                  {filtered.map((qc, i) => {
+                    const qcKey = qc.id ?? qc.ref_no
+                    const checked = selectedQCIds.has(qcKey)
+                    return (
+                      <div key={qc.id ?? i}
+                        onClick={multiSelectQC ? () => setSelectedQCIds(prev => { const n = new Set(prev); n.has(qcKey) ? n.delete(qcKey) : n.add(qcKey); return n }) : undefined}
+                        className={`flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors ${multiSelectQC ? 'cursor-pointer' : ''} ${checked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : ''}`}>
+                        {multiSelectQC && (
+                          <button onClick={e => { e.stopPropagation(); setSelectedQCIds(prev => { const n = new Set(prev); n.has(qcKey) ? n.delete(qcKey) : n.add(qcKey); return n }) }}
+                            className="mt-0.5 shrink-0 cursor-pointer text-[#3F51B5]">
+                            {checked ? <CheckSquare className="size-3.5" /> : <Square className="size-3.5 text-gray-300 dark:text-gray-600" />}
+                          </button>
+                        )}
+                        <button onClick={() => handleSelect(qc)} className="flex-1 text-left cursor-pointer">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{qc.ref_no}</span>
+                            {qc.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(qc.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                          </div>
+                          {qc.supplier && (
+                            <div className="mt-0.5 flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{qc.supplier}</span>
+                              {qc.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{qc.date}</span>}
+                            </div>
+                          )}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Bulk action bar */}
+                {multiSelectQC && selectedQCIds.size > 0 && (
+                  <div ref={bulkRunBtnRef} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#3F51B5]/5 border border-[#3F51B5]/20">
+                    <span className="text-[12px] text-[#3F51B5] dark:text-[#7986CB] font-semibold">{selectedQCIds.size} QC{selectedQCIds.size > 1 ? 's' : ''} selected</span>
+                    <div className="flex items-center gap-2">
+                      {bulkRunning ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" />
+                          <span className="text-[11px] text-gray-500">{bulkProgress} / {selectedQCIds.size}</span>
+                          <button onClick={() => { bulkAbort.current = true }} className="text-[11px] text-red-500 hover:underline cursor-pointer">Stop</button>
+                        </div>
+                      ) : (
+                        <Button onClick={handleBulkRun} size="sm" className="h-7 text-[11px] gap-1.5 cursor-pointer bg-[#3F51B5] hover:bg-[#303f9f]">
+                          <ListChecks className="size-3" />Run All
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* Progress bar */}
+                {bulkRunning && (
+                  <div className="h-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-full bg-[#3F51B5] transition-all duration-300 rounded-full" style={{ width: `${(bulkProgress / selectedQCIds.size) * 100}%` }} />
+                  </div>
+                )}
+                {/* Bulk results */}
+                {bulkOpen && bulkResults.length > 0 && (
+                  <div ref={bulkResultsRef} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Bulk Results</span>
+                      <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                        <span>{sortedBulkResults.filter(r => r.done && r.ok).length} passed · {sortedBulkResults.filter(r => r.done && !r.ok).length} failed</span>
+                        {!bulkRunning && <button onClick={() => setBulkOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer ml-1"><X className="size-3" /></button>}
+                      </div>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
+                      {sortedBulkResults.map((r, i) => (
+                        <div key={i} ref={el => { bulkRowRefs.current[i] = el }}
+                          className={`flex items-center gap-2.5 px-3 py-2 ${!r.done ? 'opacity-50' : r.ok ? '' : 'bg-red-50/40 dark:bg-red-900/10'}`}>
+                          <div className="shrink-0">
+                            {!r.done ? <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" /> : r.ok ? <CheckCircle2 className="size-3.5 text-emerald-500" /> : <XCircle className="size-3.5 text-red-500" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{r.qc.ref_no}</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{r.qc.supplier}</span>
+                            </div>
+                            {r.done && !r.ok && (
+                              <div className="text-[10px] text-red-500 dark:text-red-400 mt-0.5 truncate">
+                                {r.error || (r.failCount != null ? `${r.failCount} field${r.failCount !== 1 ? 's' : ''} mismatched` : 'Cross-check failed')}
+                              </div>
+                            )}
+                          </div>
+                          {r.done && r.qcData && r.pbData && (
+                            <button onClick={() => {
+                              bulkFromView.current = true
+                              bulkViewIndex.current = i
+                              setSelectedQC(r.qc)
+                              setShowList(false)
+                              setQcData(r.qcData)
+                              setPbData(r.pbData)
+                              setFetchError('')
+                              setPbError('')
+                            }} className="text-[10px] text-[#3F51B5] hover:underline shrink-0 cursor-pointer flex items-center gap-0.5">
+                              <Eye className="size-3" />View
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -482,10 +666,24 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
               <div className="space-y-4">
                 {/* Nav */}
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedQC(null); setFetchError(''); setPbError('') }}
-                    className="flex items-center gap-1 text-[11px] h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:text-[#3F51B5] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
-                    <RefreshCw className="size-3" /> Change
-                  </button>
+                  {bulkFromView.current ? (
+                    <button onClick={() => {
+                      const idx = bulkViewIndex.current
+                      bulkFromView.current = false
+                      setShowList(true); setQcData(null); setPbData(null); setSelectedQC(null); setFetchError(''); setPbError('')
+                      setTimeout(() => {
+                        bulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                        setTimeout(() => bulkRowRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
+                      }, 50)
+                    }} className="flex items-center gap-1 text-[11px] h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:text-[#3F51B5] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
+                      ← Back to results
+                    </button>
+                  ) : (
+                    <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedQC(null); setFetchError(''); setPbError('') }}
+                      className="flex items-center gap-1 text-[11px] h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:text-[#3F51B5] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
+                      <RefreshCw className="size-3" /> Change
+                    </button>
+                  )}
                   {!fetching && !pbLoading && qcData && pbData && (
                     <span className={`flex items-center gap-1 text-[11px] font-medium ${allOk ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {allOk ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}

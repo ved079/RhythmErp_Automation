@@ -1034,7 +1034,7 @@ export default function Home() {
                 {selectedModule === 'full-purchase-flow' && (
                   <PurchaseChainSection
                     erpToken={erpToken}
-                    erpTenantId={erpTenantId || '681'}
+                    erpTenantId={erpTenantId}
                     onNeedsToken={() => setTokenDialogOpen(true)}
                     onClearToken={onClearToken}
                     userId={user?.id}
@@ -1043,7 +1043,7 @@ export default function Home() {
                 {selectedModule === 'full-purchase-flow-jv' && (
                   <JVCheckSection
                     erpToken={erpToken}
-                    erpTenantId={erpTenantId || '681'}
+                    erpTenantId={erpTenantId}
                     onNeedsToken={() => setTokenDialogOpen(true)}
                     onClearToken={onClearToken}
                   />
@@ -1054,7 +1054,7 @@ export default function Home() {
           {selectedModule === 'qc-formula-check' && (
             <QCValidatorPanel
               erpToken={erpToken}
-              erpTenantId={erpTenantId || '681'}
+              erpTenantId={erpTenantId}
               onNeedsToken={() => setTokenDialogOpen(true)}
               onClearToken={onClearToken}
             />
