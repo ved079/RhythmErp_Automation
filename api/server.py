@@ -23,6 +23,7 @@ import os
 import json
 import concurrent.futures
 from pathlib import Path
+from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -682,8 +683,8 @@ class PBListRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str
 
-@app.post("/api/pb-list")
-def pb_list_endpoint(request: PBListRequest):
+@app.post("/api/pb-list-qc")
+def pb_list_qc_endpoint(request: PBListRequest):
     """List Purchase Bookings that have a linked QC (qc_ref_id_id is set)."""
     client = _make_client(request.erp_token, request.erp_tenant_id)
     results = []
@@ -730,6 +731,88 @@ def pb_fetch_endpoint(request: PBFetchRequest):
     if resp.status_code != 200:
         return JSONResponse({"error": f"PB fetch failed: {resp.status_code}"}, status_code=resp.status_code)
     return JSONResponse(resp.json())
+
+class ResolveRefsRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    supplier_id: Optional[int] = None
+    grn_id: Optional[int] = None
+    po_id: Optional[int] = None
+    item_ids: List[int] = []
+
+@app.post("/api/resolve-refs")
+def resolve_refs_endpoint(request: ResolveRefsRequest):
+    """Resolve numeric IDs to display names/ref numbers for supplier, GRN, PO, and items."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    result: dict = {}
+
+    def _get_first(*urls: str):
+        """Try each URL in order; return first successful JSON response."""
+        for url in urls:
+            try:
+                r = client.session.get(url, timeout=8)
+                if r.status_code == 200:
+                    return r.json()
+            except Exception:
+                pass
+        return None
+
+    def _ref_no(d: dict) -> str:
+        return d.get("transaction_ref_no") or d.get("ref_no") or d.get("name") or ""
+
+    tasks = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+        base = client.BASE_URL
+        if request.supplier_id:
+            tasks["supplier"] = ex.submit(_get_first,
+                f"{base}/core/dynamic-screen-wrapper/Supplier/{request.supplier_id}/",
+            )
+        if request.grn_id:
+            tasks["grn"] = ex.submit(_get_first,
+                f"{base}/procure_to_pay/grn/{request.grn_id}/",
+            )
+        if request.po_id:
+            tasks["po"] = ex.submit(_get_first,
+                f"{base}/procure_to_pay/purchase_order/{request.po_id}/",
+            )
+        for iid in request.item_ids:
+            tasks[f"item_{iid}"] = ex.submit(_get_first,
+                f"{base}/core/dynamic-screen-wrapper/Item%20Master/{iid}/",
+            )
+
+    if "supplier" in tasks:
+        d = tasks["supplier"].result()
+        if d:
+            result["supplier"] = d.get("name") or d.get("supplier_name") or d.get("display_name") or ""
+
+    if "grn" in tasks:
+        d = tasks["grn"].result()
+        if d:
+            ref = _ref_no(d)
+            if ref:
+                result["grn_ref"] = ref
+
+    if "po" in tasks:
+        d = tasks["po"].result()
+        if d:
+            ref = _ref_no(d)
+            if ref:
+                result["po_ref"] = ref
+
+    items: dict = {}
+    for iid in request.item_ids:
+        d = tasks.get(f"item_{iid}", None)
+        if d is not None:
+            d = d.result()
+        if d:
+            name = d.get("name") or d.get("item_name") or d.get("display_name")
+            if name:
+                items[str(iid)] = name
+    if items:
+        result["items"] = items
+
+    return JSONResponse(result)
+
 
 class PBByQCRequest(BaseModel):
     erp_token: str

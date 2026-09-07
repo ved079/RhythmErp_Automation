@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X, Eye } from 'lucide-react'
 import { fetchQC } from '@/lib/api'
-import { fetchPBList, fetchPBById, type PBCrossListItem } from '@/lib/api'
+import { fetchPBList, fetchPBById, resolveRefs, type PBCrossListItem, type ResolvedRefs } from '@/lib/api'
 
 import { useErpToken } from '@/hooks/useErpToken'
 import LoadingCard from '@/components/ui/LoadingCard'
@@ -239,9 +239,9 @@ function PBChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[],
 }
 
 // ── Line section — QC line paired with PB line ────────────────────────────────
-function LineSection({ idx, qcLine, pbLine, crossRows, pbCheckRows, crossStart, pbCheckStart, revealedCount, isFirst }: {
+function LineSection({ idx, qcLine, pbLine, crossRows, pbCheckRows, crossStart, pbCheckStart, revealedCount, isFirst, itemName }: {
   idx: number; qcLine: any; pbLine: any; crossRows: CrossRow[]; pbCheckRows: CheckRow[]
-  crossStart: number; pbCheckStart: number; revealedCount: number; isFirst: boolean
+  crossStart: number; pbCheckStart: number; revealedCount: number; isFirst: boolean; itemName?: string
 }) {
   const allOk = [...crossRows, ...pbCheckRows].every(r => r.ok)
   const failCount = [...crossRows, ...pbCheckRows].filter(r => !r.ok).length
@@ -249,7 +249,7 @@ function LineSection({ idx, qcLine, pbLine, crossRows, pbCheckRows, crossStart, 
   useEffect(() => { if (!allOk) setOpen(true) }, [allOk])
 
   const specs = [
-    { label: 'Item', value: `#${qcLine.item_ref_id}` },
+    { label: 'Item', value: itemName ? `#${qcLine.item_ref_id} · ${itemName}` : `#${qcLine.item_ref_id}` },
     { label: 'Rate', value: `₹${Number(qcLine.base_rate).toLocaleString('en-IN')}` },
     { label: 'GRN qty', value: String(qcLine.grn_qty) },
     { label: 'GST type', value: pbLine.gst_type || '—' },
@@ -261,7 +261,10 @@ function LineSection({ idx, qcLine, pbLine, crossRows, pbCheckRows, crossStart, 
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
         <span className="text-[9px] font-bold uppercase tracking-[0.13em] text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 shrink-0">Line {idx + 1}</span>
-        <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 flex-1 text-left">Item <span className="font-mono font-normal text-gray-500 dark:text-gray-400">#{qcLine.item_ref_id}</span></span>
+        <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 flex-1 text-left">
+          Item <span className="font-mono font-normal text-gray-500 dark:text-gray-400">#{qcLine.item_ref_id}</span>
+          {itemName && <span className="ml-1.5 font-normal text-gray-500 dark:text-gray-400 text-[11px]">· {itemName}</span>}
+        </span>
         <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${allOk ? 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-900/10' : 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/10'}`}>
           {allOk ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
           {allOk ? 'All passed' : `${failCount} failed`}
@@ -299,28 +302,42 @@ function LineSection({ idx, qcLine, pbLine, crossRows, pbCheckRows, crossStart, 
 }
 
 // ── Header cross-checks ───────────────────────────────────────────────────────
-function HeaderCrossTable({ qcData, pbData }: { qcData: any; pbData: any }) {
+function HeaderCrossTable({ qcData, pbData, refs }: { qcData: any; pbData: any; refs: ResolvedRefs }) {
   const rows = [
-    { field: 'supplier', qcPath: 'supplier_ref_id', pbPath: 'supplier_ref_id', qcVal: qcData.supplier_ref_id, pbVal: pbData.supplier_ref_id },
-    { field: 'grn_ref',  qcPath: 'grn_ref_id_id',  pbPath: 'grn_ref_id_id',  qcVal: qcData.grn_ref_id_id,  pbVal: pbData.grn_ref_id_id },
-    { field: 'po_ref',   qcPath: 'po_ref_id_id',   pbPath: 'po_ref_id_id',   qcVal: qcData.po_ref_id_id,   pbVal: pbData.po_ref_id_id },
+    { field: 'supplier', qcVal: qcData.supplier_ref_id, pbVal: pbData.supplier_ref_id, resolvedName: refs.supplier },
+    { field: 'grn_ref',  qcVal: qcData.grn_ref_id_id,  pbVal: pbData.grn_ref_id_id,   resolvedName: refs.grn_ref },
+    { field: 'po_ref',   qcVal: qcData.po_ref_id_id,   pbVal: pbData.po_ref_id_id,    resolvedName: refs.po_ref },
   ].map(r => ({ ...r, ok: String(r.qcVal) === String(r.pbVal) }))
 
   const allOk = rows.every(r => r.ok)
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Header links</span>
-        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
-        <span className={`text-[10px] font-semibold ${allOk ? 'text-emerald-500' : 'text-red-500'}`}>{allOk ? 'Linked correctly' : 'Link mismatch'}</span>
+      {/* Table header */}
+      <div className="grid grid-cols-[6rem_1fr_1fr_1.5rem] gap-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 self-center">Header links</span>
+        <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-blue-400 dark:text-blue-500 px-2">QC</span>
+        <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-purple-400 dark:text-purple-500 px-2">PB</span>
+        <span className={`text-[10px] font-semibold self-center text-right ${allOk ? 'text-emerald-500' : 'text-red-500'}`}>
+          {allOk ? '✓' : '✗'}
+        </span>
       </div>
       <div className="divide-y divide-gray-100 dark:divide-gray-800">
         {rows.map((row, i) => (
-          <div key={i} className={`flex items-center gap-3 px-3 py-2.5 ${row.ok ? '' : 'bg-red-50/50 dark:bg-red-900/10'}`}>
-            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 w-20 shrink-0">{row.field}</span>
-            <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 flex-1">QC: {String(row.qcVal)}</span>
-            <span className="text-[11px] font-mono text-purple-600 dark:text-purple-400 flex-1">PB: {String(row.pbVal)}</span>
-            {row.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" /> : <XCircle className="size-3.5 text-red-500 shrink-0" />}
+          <div key={i} className={`grid grid-cols-[6rem_1fr_1fr_1.5rem] gap-0 px-3 py-2 ${row.ok ? '' : 'bg-red-50/50 dark:bg-red-900/10'}`}>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 self-start pt-0.5">{row.field}</span>
+            <div className="px-2 min-w-0">
+              <div className="text-[11px] font-medium text-gray-700 dark:text-gray-200 truncate">
+                {row.resolvedName || <span className="font-mono text-blue-600 dark:text-blue-400">{String(row.qcVal)}</span>}
+              </div>
+            </div>
+            <div className="px-2 min-w-0">
+              <div className="text-[11px] font-medium text-gray-700 dark:text-gray-200 truncate">
+                {row.resolvedName || <span className="font-mono text-purple-600 dark:text-purple-400">{String(row.pbVal)}</span>}
+              </div>
+            </div>
+            <div className="self-start pt-0.5">
+              {row.ok ? <CheckCircle2 className="size-3.5 text-emerald-500" /> : <XCircle className="size-3.5 text-red-500" />}
+            </div>
           </div>
         ))}
       </div>
@@ -370,6 +387,8 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const [showList, setShowList] = useState(true)
   const [qcData, setQcData] = useState<any>(null)
   const [pbData, setPbData] = useState<any>(null)
+  const [refs, setRefs] = useState<ResolvedRefs>({})
+  const [refsLoading, setRefsLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
 
@@ -408,7 +427,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
   // Fetch both PB detail and QC detail for a selected PB listing row
   const handleSelect = async (pb: PBCrossListItem) => {
     setSelectedPB(pb); setShowList(false)
-    setFetching(true); setFetchError(''); setQcData(null); setPbData(null)
+    setFetching(true); setFetchError(''); setQcData(null); setPbData(null); setRefs({})
     try {
       const pbDetail = await fetchPBById(token!, tenantId, String(pb.id))
       if (pbDetail.error) throw new Error(pbDetail.error)
@@ -418,6 +437,15 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
       const qcDetail = await fetchQC(token!, tenantId, String(qcNumericId))
       if (qcDetail.error) throw new Error(qcDetail.error)
       setQcData(qcDetail)
+      // Resolve IDs to display names — gate the header table render until done
+      const itemIds = (qcDetail.qc_details ?? []).map((l: any) => l.item_ref_id).filter(Boolean)
+      setRefsLoading(true)
+      resolveRefs(token!, tenantId, {
+        supplier_id: qcDetail.supplier_ref_id ?? null,
+        grn_id: qcDetail.grn_ref_id_id ?? null,
+        po_id: qcDetail.po_ref_id_id ?? null,
+        item_ids: itemIds,
+      }).then(r => setRefs(r)).catch(() => {}).finally(() => setRefsLoading(false))
     } catch (err) {
       if (!handleAuthError(err)) setFetchError(err instanceof Error ? err.message : String(err))
     } finally { setFetching(false) }
@@ -675,7 +703,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                     <button onClick={() => {
                       const idx = bulkViewIndex.current
                       bulkFromView.current = false
-                      setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError('')
+                      setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError(''); setRefs({}); setRefsLoading(false)
                       setTimeout(() => {
                         bulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
                         setTimeout(() => bulkRowRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
@@ -684,7 +712,7 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                       ← Back to results
                     </button>
                   ) : (
-                    <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError('') }}
+                    <button onClick={() => { setShowList(true); setQcData(null); setPbData(null); setSelectedPB(null); setFetchError(''); setRefs({}); setRefsLoading(false) }}
                       className="flex items-center gap-1 text-[11px] h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:text-[#3F51B5] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
                       <RefreshCw className="size-3" /> Change
                     </button>
@@ -721,7 +749,13 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
 
                 {qcData && pbData && (
                   <>
-                    <HeaderCrossTable qcData={qcData} pbData={pbData} />
+                    {refsLoading
+                      ? <div className="flex items-center gap-2 px-3 py-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                          <Loader2 className="size-3.5 animate-spin text-gray-400" />
+                          <span className="text-[11px] text-gray-400">Resolving IDs…</span>
+                        </div>
+                      : <HeaderCrossTable qcData={qcData} pbData={pbData} refs={refs} />
+                    }
                     {allSections.map((sec, idx) => {
                       let offset = 0
                       for (let j = 0; j < idx; j++) offset += allSections[j].crossRows.length + allSections[j].pbCheckRows.length
@@ -730,7 +764,8 @@ export function QCPBCrossCheck({ erpToken, erpTenantId, onNeedsToken, onClearTok
                           qcLine={sec.qcLine} pbLine={sec.pbLine}
                           crossRows={sec.crossRows} pbCheckRows={sec.pbCheckRows}
                           crossStart={offset} pbCheckStart={offset + sec.crossRows.length}
-                          revealedCount={revealedCount} isFirst={idx === 0} />
+                          revealedCount={revealedCount} isFirst={idx === 0}
+                          itemName={refs.items?.[String(sec.qcLine.item_ref_id)]} />
                       )
                     })}
                   </>

@@ -515,7 +515,7 @@ export interface PBCrossListItem {
 }
 
 export async function fetchPBList(erpToken: string, erpTenantId: string): Promise<PBCrossListItem[]> {
-  const res = await fetch(`${PROXY}?path=pb-list`, withCsrf({
+  const res = await fetch(`${PROXY}?path=pb-list-qc`, withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
@@ -532,6 +532,26 @@ export async function fetchPBById(erpToken: string, erpTenantId: string, pbId: s
     body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_id: pbId }),
   }))
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export interface ResolvedRefs {
+  supplier?: string
+  grn_ref?: string
+  po_ref?: string
+  items?: Record<string, string>
+}
+
+export async function resolveRefs(
+  erpToken: string, erpTenantId: string,
+  opts: { supplier_id?: number | null; grn_id?: number | null; po_id?: number | null; item_ids?: number[] }
+): Promise<ResolvedRefs> {
+  const res = await fetch(`${PROXY}?path=resolve-refs`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, ...opts }),
+  }))
+  if (!res.ok) return {}
   return res.json()
 }
 
