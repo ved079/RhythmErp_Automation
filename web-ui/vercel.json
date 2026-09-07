@@ -1,0 +1,9 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "bhagyesh_Branch": false,
+      "gautam_Branch": false,
+      "vedant_backup_branch": false
+    }
+  }
+}
