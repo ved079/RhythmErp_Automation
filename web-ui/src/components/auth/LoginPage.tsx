@@ -803,10 +803,11 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
         transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <img
-          src="/agdi-hero-illustration.png"
+          src="/agdi-hero-illustration3.png"
           alt="AgDi - Agricultural Digital Intelligence"
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover object-center"
         />
+        <div className="absolute inset-0 bg-gradient-to-r from-white dark:from-gray-800 via-white/30 dark:via-gray-800/30 to-transparent pointer-events-none" style={{ width: '28%' }} />
       </motion.div>
     </div>
   )
