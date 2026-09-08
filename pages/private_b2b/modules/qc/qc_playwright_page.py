@@ -32,7 +32,7 @@ class QCPlaywrightPage(BasePlaywrightPage):
     TXN_AMOUNT      = "xpath=//mat-form-field[.//mat-label[contains(.,'Transaction Amount') and not(contains(.,'Total'))]]//input"
 
     # QC Parameter popup
-    QC_PARAM_BTN  = "xpath=//td[contains(@class,'col_input')]//button[.//mat-icon[text()='add']]"
+    QC_PARAM_BTN  = "button.apply-button[data-sd-details-opener*='qc_parameter_details']"
     ACTUAL_VALUE  = "xpath=//mat-form-field[.//mat-label[contains(.,'Actual Value')]]//input"
     DONE_BTN      = "xpath=//button[contains(.,'Done')]"
 
@@ -67,7 +67,7 @@ class QCPlaywrightPage(BasePlaywrightPage):
                     # No CQP config — fill value=1 to probe
                     actual_values = [1] * 3
                 else:
-                    actual_values = [max(1, int(p["min_q"])) for p in params]
+                    actual_values = [round(p["max_q"] + 0.1, 2) for p in params]
 
                 self._fill_nth(self.NO_OF_BAGS, i, "1")
                 self.open_qc_param_popup(i)
@@ -349,9 +349,24 @@ class QCPlaywrightPage(BasePlaywrightPage):
         for i, val in enumerate(actual_values[:visible_count]):
             inp = self.page.locator(scope).nth(i)
             inp.wait_for(state="visible", timeout=8000)
-            inp.fill(str(val))
+            # Use JS setter + Angular events so QC Deduction Rate recalculates
+            self.page.evaluate("""
+                ([xpath, idx, val]) => {
+                    const inputs = Array.from(document.querySelectorAll(
+                        'input[placeholder="Actual Value"]'
+                    )).filter(el => el.offsetParent !== null);
+                    const el = inputs[idx];
+                    if (!el) return;
+                    const setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    el.blur();
+                }
+            """, [scope, i, str(val)])
             self.page.wait_for_timeout(300)
-        self.page.wait_for_timeout(300)
+        self.page.wait_for_timeout(500)
 
     def click_done(self):
         self.page.locator(self.DONE_BTN).click(force=True)
@@ -445,10 +460,11 @@ class QCPlaywrightPage(BasePlaywrightPage):
         return float(val) if val else None
 
     def safe_actual_values(self, row_index=0, max_pct=20):
-        """Return actual values that keep deduction% positive.
+        """Return actual values that produce a small positive deduction.
 
-        Deduction% = sum(actual_values). Use min_q for each param to
-        minimise total deduction and keep QC Rate above zero.
+        Uses max_q + 0.1 per param: puts actual just inside slab2 (slab1
+        has multiplier=0 → 0% deduction which ERP rejects; slab2 gives a
+        tiny but valid positive deduction).
         """
         params = []
         item_names = getattr(self, "item_names", [])
@@ -461,8 +477,7 @@ class QCPlaywrightPage(BasePlaywrightPage):
 
         result = []
         for p in params:
-            min_v = max(1, int(p["min_q"]))
-            result.append(min_v)
+            result.append(round(p["max_q"] + 0.1, 2))
         label = item_names[row_index] if item_names else "?"
         pairs = [p["param"] + "=" + str(v) for p, v in zip(params, result)]
         print(f"[QC] safe_actual_values for '{label}': {pairs}")
