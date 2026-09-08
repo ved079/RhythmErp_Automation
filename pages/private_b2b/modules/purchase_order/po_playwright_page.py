@@ -253,7 +253,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
-        self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
+        self._select_mat_by_text(self.TYPE_OF_SALE, "1V1")
         if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
             self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
 
@@ -469,7 +469,7 @@ class POPlaywrightPage(BasePlaywrightPage):
             chosen_supplier = supplier_name
         else:
             chosen_supplier = self._select_random_mat_option_text(self.SUPPLIER_NAME)
-        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Beverages")
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Cement & Concrete")
         self.page.wait_for_timeout(600)
 
         self.page.locator(self.ITEM_NAME).first.click(force=True)
@@ -501,7 +501,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
-        self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
+        self._select_mat_by_text(self.TYPE_OF_SALE, "1V1")
         if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
             self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
 
@@ -779,7 +779,7 @@ class POPlaywrightPage(BasePlaywrightPage):
             supplier_name = forced_supplier
         else:
             supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
-        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Beverages")
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Cement & Concrete")
         self._try_select_random_mat_option(self.PO_TYPE)
         self.page.wait_for_timeout(400)
         conv_rate_field = self.page.locator(self.CONVERSION_RATE)
@@ -796,7 +796,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
-        self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
+        self._select_mat_by_text(self.TYPE_OF_SALE, "1V1")
         # Packaging Forwarding was removed from the ERP form — skip if not present
         if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
             self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
