@@ -229,8 +229,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [categories, setCategories] = useState<ItemCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
-  const [starredFlow, setStarredFlow] = useState<'po' | 'gp' | 'so' | null>(null)
-  const [flow, setFlow] = useState<'po' | 'gp' | 'so'>('po')
+  const [starredFlow, setStarredFlow] = useState<'po' | 'gp' | 'so' | 'poqc' | null>(null)
+  const [flow, setFlow] = useState<'po' | 'gp' | 'so' | 'poqc'>('po')
   const [supplierType, setSupplierType] = useState<'Supplier' | 'Farmer'>('Supplier')
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
@@ -253,11 +253,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   // On mount (or when userId changes): restore this user's starred flow from localStorage.
   useEffect(() => {
     const key = userId ? `pc_starred_flow:${userId}` : 'pc_starred_flow'
-    const saved = localStorage.getItem(key) as 'po' | 'gp' | 'so' | null
+    const saved = localStorage.getItem(key) as 'po' | 'gp' | 'so' | 'poqc' | null
     if (saved) {
       setStarredFlow(saved)
       setFlow(saved)
-      setEnabledDocs(new Set(saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
+      setEnabledDocs(new Set(
+        saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] :
+        saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] :
+        saved === 'poqc' ? ['PO', 'QC', 'PB'] :
+        ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']
+      ))
     }
   }, [userId])
 
@@ -395,11 +400,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   // standalone GP starts directly at the Gate Pass.
   const docOrder = React.useMemo(
     () =>
-      flow === 'gp'
-        ? ['GP', 'GRN', 'QC', 'PB', 'PYMT']
-        : flow === 'so'
-          ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB', 'PYMT']
-          : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT'],
+      flow === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] :
+      flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB', 'PYMT'] :
+      flow === 'poqc' ? ['PO', 'QC', 'PB'] :
+      ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT'],
     [flow],
   )
 
@@ -595,11 +599,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       {/* Controls panel */}
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
         {/* Flow selector — pinned to the top of the panel */}
-        <div className="grid grid-cols-3 border-b border-gray-300 dark:border-gray-600 shrink-0" data-tour="pc-flow">
+        <div className="grid grid-cols-4 border-b border-gray-300 dark:border-gray-600 shrink-0" data-tour="pc-flow">
           {([
             { id: 'po', label: 'PO → GP → GRN → QC → PB → PYMT' },
             { id: 'so', label: 'PO → GP → GRN → QC → SO → PB → PYMT' },
             { id: 'gp', label: 'GP → GRN → QC → PB → PYMT' },
+            { id: 'poqc', label: 'PO → QC → PB' },
           ] as const).map((f, i) => (
             <div
               key={f.id}
@@ -614,7 +619,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 onClick={() => {
                   setFlow(f.id)
                   setMultiGatePass(false)
-                  setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
+                  setEnabledDocs(new Set(
+                    f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] :
+                    f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] :
+                    f.id === 'poqc' ? ['PO', 'QC', 'PB'] :
+                    ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']
+                  ))
                 }}
                 disabled={running}
                 className={`flex-1 px-3 pl-2 pr-7 py-2 text-[11px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
@@ -730,7 +740,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           </div>
           )}
 
-          {flow !== 'gp' && (
+          {flow !== 'gp' && flow !== 'poqc' && (
           <>
 
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-tax">
@@ -1232,6 +1242,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 { id: '666', name: 'Jay Kisan Ltd' },
                 { id: '686', name: 'Agristack Company' },
                 { id: '751', name: 'Tech Neo' },
+                { id: '895', name: 'Janardhan FPC' },
               ].map(t => (
                 <button
                   key={t.id}
@@ -1271,6 +1282,14 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
         {/* Sticky bottom bar */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex flex-col gap-2">
+          {flow === 'poqc' && _erpTenantId !== '895' && (
+            <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2">
+              <AlertTriangle className="size-4 text-amber-500 dark:text-amber-400 shrink-0" />
+              <span className="text-[12px] text-amber-700 dark:text-amber-300">
+                This flow won&apos;t work with your token and ID. Please login to <strong>Janardhan FPC</strong> and set the token.
+              </span>
+            </div>
+          )}
           {missingCqpItems.length > 0 && !running && (
             <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2">
               <AlertTriangle className="size-4 text-amber-500 dark:text-amber-400 shrink-0" />
@@ -1295,7 +1314,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           {!running ? (
             <Button
               onClick={handleStart}
-              disabled={running || supplier === null || itemIds.length === 0 || loadingData}
+              disabled={running || supplier === null || itemIds.length === 0 || loadingData || (flow === 'poqc' && _erpTenantId !== '895')}
               className="h-8 text-[12px] gap-1.5 cursor-pointer"
               data-tour="pc-run"
             >

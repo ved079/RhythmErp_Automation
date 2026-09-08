@@ -629,9 +629,30 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   )
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-[#c8e8f0]">
       {/* ─── LEFT: Login/ForgotPassword Form ─── */}
-      <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4">
+      <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4 relative overflow-hidden">
+        {/* Leaves — top-left */}
+        <motion.img
+          src="/top_left_corner.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute top-0 left-0 w-[55%] pointer-events-none select-none z-0"
+          initial={{ opacity: 0, x: -30, y: -30 }}
+          animate={{ opacity: 0.9, x: 0, y: 0 }}
+          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+        />
+        {/* Leaves — bottom-left */}
+        <motion.img
+          src="/Leaves_agdi_login.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute bottom-0 left-0 w-[55%] pointer-events-none select-none z-0"
+          initial={{ opacity: 0, x: -30, y: 30 }}
+          animate={{ opacity: 0.9, x: 0, y: 0 }}
+          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+        />
+        <div className="relative z-10 w-full">
         <AnimatePresence mode="wait">
           {forgotPassword ? (
             <motion.div
@@ -648,99 +669,62 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
             <motion.div
               key="login"
               className="w-full flex justify-center"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="w-full max-w-[300px]">
                 {/* Logo */}
-                <motion.div
-                  className="text-center mb-[20px]"
-                  initial={{ y: -60, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ type: 'spring', stiffness: 120, damping: 14, mass: 0.8 }}
-                >
-                  <motion.div
-                    className="flex justify-center mb-0"
-                    initial={{ scale: 0.3, rotate: -15 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
-                  >
+                <div className="text-center mb-[20px]">
+                  <div className="flex justify-center mb-0">
                     <Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={200} height={92} className="object-contain" priority />
-                  </motion.div>
-                </motion.div>
+                  </div>
+                </div>
 
                 {/* Heading */}
                 <div className="text-center">
-                  <motion.h4
-                    className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mt-[24px] mb-2"
-                    initial={{ y: 15, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
-                  >
+                  <h4 className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mt-[24px] mb-2">
                     Welcome Back !
-                  </motion.h4>
-                  <motion.p
-                    className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]"
-                    initial={{ y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
-                  >
+                  </h4>
+                  <p className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]">
                     Sign in to continue
-                  </motion.p>
+                  </p>
                 </div>
 
                 {/* Form */}
-                <motion.div
-                  className="p-2 mt-8"
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-                >
+                <div className="p-2 mt-8">
                   <form onSubmit={handleSubmit}>
-                    <motion.div
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{ delay: 0.65, duration: 0.4 }}
-                    >
-                      <MaterialOutlinedField
-                        label="Username"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        icon={<User className="size-[24px]" />}
-                        required
-                        autoFocus
-                      />
-                    </motion.div>
+                    <MaterialOutlinedField
+                      label="Username"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      icon={<User className="size-[24px]" />}
+                      required
+                      autoFocus
+                    />
 
-                    <motion.div
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{ delay: 0.75, duration: 0.4 }}
-                    >
-                      <MaterialOutlinedField
-                        label="Password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        icon={<Lock className="size-[24px]" />}
-                        required
-                        suffixIcon={showPassword ? <Eye className="size-[24px]" /> : <EyeOff className="size-[24px]" />}
-                        onSuffixClick={() => setShowPassword(!showPassword)}
-                      />
-                    </motion.div>
+                    <MaterialOutlinedField
+                      label="Password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      icon={<Lock className="size-[24px]" />}
+                      required
+                      suffixIcon={showPassword ? <Eye className="size-[24px]" /> : <EyeOff className="size-[24px]" />}
+                      onSuffixClick={() => setShowPassword(!showPassword)}
+                    />
 
                     {/* Error message */}
                     <AnimatePresence>
                       {error && (
                         <motion.div
                           className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-[4px] flex items-center gap-2 mb-4"
-                          initial={{ height: 0, opacity: 0, scale: 0.95 }}
-                          animate={{ height: 'auto', opacity: 1, scale: 1 }}
-                          exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.25 }}
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeOut' }}
                         >
                           <XCircle className="size-3.5 shrink-0" />
                           {error}
@@ -749,12 +733,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                     </AnimatePresence>
 
                     {/* Forgot Password */}
-                    <motion.div
-                      className="flex justify-between items-center pt-[15px] pb-[20px]"
-                      initial={{ y: 10, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.85, duration: 0.4 }}
-                    >
+                    <div className="flex justify-between items-center pt-[15px] pb-[20px]">
                       <div />
                       <button
                         type="button"
@@ -763,15 +742,10 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                       >
                         Forgot Password?
                       </button>
-                    </motion.div>
+                    </div>
 
                     {/* Login button */}
-                    <motion.div
-                      className="flex justify-center"
-                      initial={{ y: 15, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.95, duration: 0.4 }}
-                    >
+                    <div className="flex justify-center">
                       <Button
                         type="submit"
                         disabled={loading}
@@ -786,29 +760,25 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                           'Login'
                         )}
                       </Button>
-                    </motion.div>
+                    </div>
                   </form>
-                </motion.div>
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
 
       {/* ─── RIGHT: Hero ─── */}
-      <motion.div
-        className="hidden lg:block lg:w-2/3 relative overflow-hidden"
-        initial={{ x: 80, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
+      <div className="hidden lg:block lg:w-2/3 relative overflow-hidden">
         <img
           src="/agdi-hero-illustration3.png"
           alt="AgDi - Agricultural Digital Intelligence"
           className="w-full h-full object-cover object-center"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-white dark:from-gray-800 via-white/30 dark:via-gray-800/30 to-transparent pointer-events-none" style={{ width: '28%' }} />
-      </motion.div>
+      </div>
     </div>
   )
 }

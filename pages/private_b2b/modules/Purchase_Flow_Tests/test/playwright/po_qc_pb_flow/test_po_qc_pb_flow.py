@@ -16,6 +16,7 @@ from pages.private_b2b.modules.qc.qc_playwright_page import QCPlaywrightPage
 from pages.private_b2b.modules.qc.cqp_playwright_page import CQPPlaywrightPage
 from pages.private_b2b.modules.purchase_booking.pb_playwright_page import PBPlaywrightPage
 from pages.private_b2b.modules.purchase_order.po_playwright_page import POPlaywrightPage
+from pages.private_b2b.utils.cqp_api_for_playwright import build_cqp_config
 
 PO_QC_PB_QTY   = 100
 MULTI_ROW_COUNT = 3   # number of item rows in the multi-row test
@@ -1418,6 +1419,7 @@ class TestEditLockFlow:
 
         integration_state["lock_supplier"] = supplier_name
         integration_state["lock_po_ref"]   = po_ref_no
+        integration_state["lock_item_name"] = row_dicts[0]["item_name"]
         print(f"\n[LOCK] PO created: {po_ref_no}  supplier={supplier_name}")
 
         po.navigate_to_page()
@@ -1435,11 +1437,17 @@ class TestEditLockFlow:
             pytest.skip("PO not created in step 1")
 
         supplier_name = integration_state["lock_supplier"]
+        item_name     = integration_state["lock_item_name"]
+
+        cqp_config = build_cqp_config([item_name], logged_in_page)
 
         qc = QCPlaywrightPage(logged_in_page)
+        qc.cqp_config = cqp_config
+        qc.item_names = [item_name]
         qc.navigate_to_page()
         qc.open_add_form()
         qc.select_supplier_and_po(supplier_name)
+
         qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
         qc.fill_qc_params_safe(row_index=0)
         qc.page.locator(qc.SUBMIT_BTN).click()
@@ -1584,21 +1592,22 @@ class TestPOViewHistoryAuditTrail:
             enable_gst=False,
         )
         assert po_ref_no, "PO ref must be non-empty"
-        integration_state["audit_po_ref"]      = po_ref_no
-        integration_state["audit_po_total"]   = total
-        integration_state["audit_supplier"]   = supplier_name
-        print(f"\n[AUDIT] PO created: {po_ref_no}  total={total}")
+        integration_state["audit_po_ref"]    = po_ref_no
+        integration_state["audit_po_total"] = total
+        integration_state["audit_supplier"] = supplier_name
+        integration_state["audit_item_name"] = row_dicts[0]["item_name"]
+        print(f"\n[AUDIT] PO created: {po_ref_no}  total={total}  item={row_dicts[0]['item_name']}")
 
         po.navigate_to_page()
         _open_row_action(logged_in_page, po_ref_no, "View")
 
-        # Wait for popup to open (overflow_model is the scrollable body)
-        logged_in_page.wait_for_selector(".big-model .overflow_model", timeout=10000)
+        # Wait for popup to open
+        logged_in_page.wait_for_selector(".big-model", timeout=10000)
         logged_in_page.wait_for_timeout(500)
 
         # Angular sets input values as JS properties, not HTML attributes — use input_value()
         ref_input = logged_in_page.locator(
-            ".big-model input[name='Transaction Ref No']"
+            ".big-model input[name='PO Ref. No.']"
         )
         ref_val = ref_input.input_value()
         assert ref_val == po_ref_no, (
@@ -1680,10 +1689,17 @@ class TestPOViewHistoryAuditTrail:
         if not integration_state.get("audit_po_ref"):
             pytest.skip("PO not created in step 1")
 
+        item_name = integration_state["audit_item_name"]
+
+        cqp_config = build_cqp_config([item_name], logged_in_page)
+
         qc = QCPlaywrightPage(logged_in_page)
+        qc.cqp_config = cqp_config
+        qc.item_names = [item_name]
         qc.navigate_to_page()
         qc.open_add_form()
         qc.select_supplier_and_po(integration_state["audit_supplier"])
+
         qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
         qc.fill_qc_params_safe(row_index=0)
         qc.page.locator(qc.SUBMIT_BTN).click()
