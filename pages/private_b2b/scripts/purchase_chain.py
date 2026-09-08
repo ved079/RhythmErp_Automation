@@ -420,10 +420,29 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
     def _param_details(item_id: int) -> List[dict]:
         cqp = cqp_by_item.get(item_id)
         if cqp:
+            # One row per unique quality_type.
+            # allowable_percent = max_quality_value of the first slab (ERP derives
+            # the stored allowable_percent field from this).
+            # actual_value = max_quality_value of first slab (= allowable threshold).
+            # First slab always has multiplier=0, so Difference × 0 = 0 deduction per param.
+            seen: dict = {}
+            for p in cqp:
+                qt = p.get("quality_type")
+                if qt is not None and qt not in seen:
+                    min_q = float(p.get("min_quality_value") or 0.0)
+                    max_q = float(p.get("max_quality_value") or 0.0)
+                    allowable = round(max_q, 2)
+                    # actual_value = allowable + 0.1 puts it just inside slab2.
+                    # Slab1 has multiplier=0 → 0% deduction; ERP rejects 0%.
+                    # Slab2 gives a tiny positive deduction that the ERP accepts.
+                    actual = round(max_q + 0.1, 2)
+                    seen[qt] = {
+                        "actual_value": actual,
+                        "allowable_percent": allowable,
+                    }
             return [
-                {"item_quality_parameter_ref_id": p["quality_type"], "actual_value": round(float(p["min_quality_value"] or 0), 2)}
-                for p in cqp
-                if p.get("quality_type") is not None
+                {"item_quality_parameter_ref_id": qt, **v}
+                for qt, v in seen.items()
             ]
         return list(quality_details)
 
@@ -473,7 +492,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
             "rate": computed["rate"],
             "uom_conversion": 1.0,
             "qc_parameter_details": [
-                {**p, "allowable_percent": 0.0, "quantity_deduction": computed["quantity_deduction"]}
+                {**p, "quantity_deduction": 0}
                 for p in _param_details(item_id)
             ],
             "qc_bags_details": [
@@ -1114,6 +1133,7 @@ class PurchaseChain:
                             "quality_type": p.get("quality_type"),
                             "min_quality_value": p.get("min_quality_value", 1),
                             "max_quality_value": p.get("max_quality_value", 100),
+                            "allowable_percent": p.get("allowable_percent", 0.0),
                             "rate_percentage": p.get("rate_percentage"),
                             "multiplier": p.get("multiplier"),
                         })
