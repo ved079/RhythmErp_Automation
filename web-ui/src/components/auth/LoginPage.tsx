@@ -629,29 +629,18 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   )
 
   return (
-    <div className="min-h-screen flex bg-[#c8e8f0]">
-      {/* ─── LEFT: Login/ForgotPassword Form ─── */}
-      <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4 relative overflow-hidden">
-        {/* Leaves — top-left */}
-        <motion.img
-          src="/top_left_corner.png"
-          alt=""
-          aria-hidden="true"
-          className="absolute top-0 left-0 w-[55%] pointer-events-none select-none z-0"
-          initial={{ opacity: 0, x: -30, y: -30 }}
-          animate={{ opacity: 0.9, x: 0, y: 0 }}
-          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+    <div className="min-h-screen relative overflow-hidden bg-white">
+      {/* ─── Hero background (organic panel + illustration baked into one image) ─── */}
+      <div className="hidden lg:block absolute inset-0 z-0">
+        <img
+          src="/agdi-login-hero-bg.png"
+          alt="AgDi - Agricultural Digital Intelligence"
+          className="w-full h-full object-cover object-left"
         />
-        {/* Leaves — bottom-left */}
-        <motion.img
-          src="/Leaves_agdi_login.png"
-          alt=""
-          aria-hidden="true"
-          className="absolute bottom-0 left-0 w-[55%] pointer-events-none select-none z-0"
-          initial={{ opacity: 0, x: -30, y: 30 }}
-          animate={{ opacity: 0.9, x: 0, y: 0 }}
-          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-        />
+      </div>
+
+      {/* ─── Login/ForgotPassword Form Content — sits in the flat white zone of the image ─── */}
+      <div className="relative z-10 flex items-center min-h-screen w-full lg:w-auto lg:max-w-[430px] px-4 lg:pl-14 lg:pr-8">
         <div className="relative z-10 w-full">
         <AnimatePresence mode="wait">
           {forgotPassword ? (
@@ -768,16 +757,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
           )}
         </AnimatePresence>
         </div>
-      </div>
 
-      {/* ─── RIGHT: Hero ─── */}
-      <div className="hidden lg:block lg:w-2/3 relative overflow-hidden">
-        <img
-          src="/agdi-hero-illustration3.png"
-          alt="AgDi - Agricultural Digital Intelligence"
-          className="w-full h-full object-cover object-center"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-white dark:from-gray-800 via-white/30 dark:via-gray-800/30 to-transparent pointer-events-none" style={{ width: '28%' }} />
       </div>
     </div>
   )

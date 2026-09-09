@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QC Formula Validator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#F0F2F5;--sf:#FFFFFF;--s2:#F7F8FA;--s3:#ECEEF2;
+  --ink:#111318;--sub:#4B5260;--dim:#8B909A;
+  --ln:#E4E7EC;--ln2:#F0F2F5;
+  --brand:#3F51B5;--ba:rgba(63,81,181,.08);--bb:rgba(63,81,181,.22);
+  --ok:#0A8F5C;--ok-bg:#EDFAF4;--ok-ln:#A5DBBE;
+  --am:#9A6200;--am-bg:#FEF6E4;
+  --bad:#C53030;--bad-bg:#FEF2F2;--bad-ln:#FBBFBF;
+  --r:10px;
+}
+html.dark{
+  --bg:#0F1115;--sf:#181C22;--s2:#1E2229;--s3:#252A33;
+  --ink:#E8E6E0;--sub:#9198A8;--dim:#5A6070;
+  --ln:#272C36;--ln2:#1E2229;
+  --brand:#7986CB;--ba:rgba(121,134,203,.10);--bb:rgba(121,134,203,.28);
+  --ok:#34C985;--ok-bg:rgba(52,201,133,.08);--ok-ln:rgba(52,201,133,.28);
+  --am:#DEAD52;--am-bg:rgba(222,173,82,.08);
+  --bad:#F27070;--bad-bg:rgba(242,112,112,.08);--bad-ln:rgba(242,112,112,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',monospace}
+button{font-family:inherit;cursor:pointer}
+
+.wrap{max-width:860px;margin:0 auto;padding:16px 14px 60px;display:flex;flex-direction:column;gap:10px}
+
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bar-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.seg{display:inline-flex;border:1px solid var(--ln);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--sub);font:600 11px 'Inter';padding:5px 11px;white-space:nowrap;transition:background .12s,color .12s}
+.seg button.on{background:var(--brand);color:#fff}
+.spacer{flex:1}
+.tbtn{border:1px solid var(--ln);background:var(--sf);color:var(--sub);font:500 11px 'Inter';padding:5px 11px;border-radius:6px}
+
+.card{background:var(--sf);border:1px solid var(--ln);border-radius:var(--r);overflow:hidden}
+
+.view{display:none;flex-direction:column}
+.view.active{display:flex}
+.cscroll{overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:11px}
+.cfoot{border-top:1px solid var(--ln);padding:9px 14px;display:flex;align-items:center;gap:12px}
+
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.flbl{font-size:11px;font-weight:600;color:var(--sub)}
+.icon-btn{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border:1px solid var(--ln);border-radius:6px;background:var(--sf);color:var(--sub);transition:all .12s}
+.icon-btn.on{border-color:var(--brand);color:var(--brand);background:var(--ba)}
+.srow{display:flex;gap:6px}
+.sinp{flex:1;height:30px;border:1px solid var(--ln);border-radius:6px;padding:0 10px;font-size:12px;background:var(--sf);color:var(--ink);outline:none;font-family:inherit}
+.sinp:focus{border-color:var(--brand)}
+.sel-all{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid var(--ln);border-radius:6px;font-size:11px;font-weight:500;background:var(--sf);color:var(--sub);white-space:nowrap}
+
+.qclist{border:1px solid var(--ln);border-radius:8px;overflow:hidden;max-height:260px;overflow-y:auto}
+.qrow{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--ln2);cursor:pointer;transition:background .1s}
+.qrow:last-child{border-bottom:none}
+.qrow:hover,.qrow.sel{background:var(--ba)}
+.qref{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;flex-shrink:0}
+.qsup{font-size:11px;color:var(--sub);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qamt{font-size:11px;color:var(--sub);flex-shrink:0}
+.qdt{font-size:10px;color:var(--dim);flex-shrink:0}
+
+.bbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:8px;background:var(--ba);border:1px solid var(--bb)}
+.bbar .bct{font-size:12px;font-weight:600;color:var(--brand)}
+.run-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border:0;border-radius:6px;background:var(--brand);color:#fff;font:600 11px 'Inter'}
+.prog{height:3px;border-radius:99px;background:var(--s3);overflow:hidden;margin-top:-4px}
+.progf{height:100%;border-radius:99px;background:var(--brand)}
+
+.bres{border:1px solid var(--ln);border-radius:8px;overflow:hidden}
+.bres-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:var(--s2);border-bottom:1px solid var(--ln)}
+.bres-lbl{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.bres-stat{font-size:10px;color:var(--sub)}
+.brows{max-height:220px;overflow-y:auto}
+.brow{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid var(--ln2)}
+.brow:last-child{border-bottom:none}
+.brow.fail{background:var(--bad-bg)}
+.bref{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600}
+.bsup{font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bmsg{font-size:10px;color:var(--bad);margin-top:1px}
+.view-btn{font-size:10px;font-weight:600;color:var(--brand);background:none;border:none;display:inline-flex;align-items:center;gap:3px;flex-shrink:0;padding:0;margin-top:1px}
+
+.rvhdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.back-btn{display:inline-flex;align-items:center;gap:5px;height:27px;padding:0 10px;border:1px solid var(--bb);border-radius:6px;background:var(--ba);color:var(--brand);font:600 11px 'Inter'}
+.change-btn{display:inline-flex;align-items:center;gap:5px;height:27px;padding:0 10px;border:1px solid var(--ln);border-radius:6px;background:var(--sf);color:var(--sub);font:500 11px 'Inter'}
+.rv-st{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600}
+.rv-st.ok{color:var(--ok)}.rv-st.bad{color:var(--bad)}
+
+.reccard{border:1px solid var(--ln);border-radius:8px;padding:11px 13px;background:var(--s2);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.recref{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700}
+.recmeta{font-size:11px;color:var(--sub);margin-top:2px}
+.recbadges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--ln);border-radius:6px;font-size:11px;background:var(--sf);color:var(--sub)}
+.badge b{font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--ink)}
+.sc{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;border:1px solid}
+.sc.created{color:#2563EB;border-color:#BFDBFE;background:#EFF6FF}
+html.dark .sc.created{color:#93C5FD;border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.08)}
+
+.trail-hdr{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
+.trail-hdr::after{content:'';flex:1;height:1px;background:var(--ln)}
+.trail{position:relative;padding-left:22px;margin-top:10px}
+.trail::before{content:'';position:absolute;left:6px;top:14px;bottom:14px;width:1px;background:var(--ln)}
+.ts{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:6px 0}
+.ts::before{content:'';position:absolute;left:-16px;top:13px;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--dim);background:var(--sf)}
+.ts.ded::before{width:6px;height:6px;border-radius:1.5px;transform:rotate(45deg);background:var(--dim);border:0;left:-15px}
+.ts.res::before{background:var(--ink);border-color:var(--ink);width:9px;height:9px}
+.ts.fin{border-top:2px dashed var(--ln);padding-top:10px;margin-top:4px}
+.ts.fin::before{width:10px;height:10px;background:var(--ok);border-color:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+.ts-l{font-size:11.5px;font-weight:500;line-height:1.3}
+.ts.ded .ts-l{color:var(--sub);font-weight:400}
+.ts.res .ts-l,.ts.fin .ts-l{font-weight:700}
+.ts-s{font-size:9.5px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.ts-a{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;text-align:right;white-space:nowrap;flex-shrink:0}
+.ts.ded .ts-a{color:var(--sub)}
+.ts.fin .ts-a{color:var(--ok);font-weight:700;display:flex;align-items:center;gap:5px}
+
+.ls{border:1px solid var(--ln);border-radius:8px;overflow:hidden}
+.ls+.ls{margin-top:10px}
+.ls-hdr{display:flex;align-items:center;gap:8px;padding:10px 13px;background:var(--s2);cursor:pointer;user-select:none}
+.ls-hdr:hover{background:var(--s3)}
+.ls-tag{font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);background:var(--s3);border:1px solid var(--ln);border-radius:5px;padding:2px 7px}
+.ls-title{font-size:12px;font-weight:600;flex:1}
+.ls-item{font-family:'JetBrains Mono',monospace;font-weight:400;color:var(--sub)}
+.ls-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid}
+.ls-badge.ok{color:var(--ok);border-color:var(--ok-ln);background:var(--ok-bg)}
+.ls-badge.bad{color:var(--bad);border-color:var(--bad-ln);background:var(--bad-bg)}
+.chv{font-size:9px;color:var(--dim)}
+.ls-body{border-top:1px solid var(--ln)}
+
+.specs{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--ln2);border-bottom:1px solid var(--ln)}
+.spec{background:var(--sf);padding:9px 11px}
+.spec-l{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}
+.spec-v{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600}
+
+.tbl-lbl{font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);padding:8px 13px 5px;display:flex;align-items:center;gap:8px}
+.tbl-lbl::after{content:'';flex:1;height:1px;background:var(--ln2)}
+.tbl-head{display:grid;gap:10px;padding:5px 13px;background:var(--s2);border-bottom:1px solid var(--ln);grid-template-columns:20px minmax(130px,1fr) minmax(0,1fr) 86px 86px 20px}
+.th{font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.th.r{text-align:right}
+.trow{display:grid;gap:10px;padding:7px 13px;border-bottom:1px solid var(--ln2);align-items:center;grid-template-columns:20px minmax(130px,1fr) minmax(0,1fr) 86px 86px 20px}
+.trow:last-child{border-bottom:none}
+.trow.amb{background:var(--am-bg)}.trow.fail{background:var(--bad-bg)}
+.td-n{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim)}
+.td-f{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;min-width:0}
+.trow.amb .td-f{color:var(--am)}.trow.fail .td-f{color:var(--bad)}
+.td-note{display:block;font-size:9px;margin-top:1px;color:var(--am)}
+.trow.fail .td-note{color:var(--bad)}
+.td-fmla{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-exact{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);text-align:right;grid-column:4/6}
+.td-exp{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);text-align:right}
+.trow.amb .td-exp{color:var(--am)}
+.td-act{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;text-align:right}
+.trow.amb .td-act{color:var(--am)}.trow.fail .td-act{color:var(--bad)}
+.td-ic{display:flex;align-items:center;justify-content:center}
+.tbl-foot{display:flex;align-items:center;justify-content:space-between;padding:7px 13px;border-top:1px solid var(--ln)}
+.tbl-foot.ok{background:var(--ok-bg)}.tbl-foot.bad{background:var(--bad-bg)}
+.tbl-foot .msg{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600}
+.tbl-foot.ok .msg{color:var(--ok)}.tbl-foot.bad .msg{color:var(--bad)}
+.tbl-foot .fct{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+
+.foot-link{font-size:11px;font-weight:600;color:var(--brand);background:none;border:none;display:inline-flex;align-items:center;gap:4px;padding:0}
+.foot-tok{font-size:11px;color:var(--ok);background:none;border:none;display:inline-flex;align-items:center;gap:4px;padding:0}
+.key-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid var(--ln);border-radius:6px;font-size:11px;font-weight:600;background:var(--sf);color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="bar">
+  <span class="bar-lbl">State</span>
+  <div class="seg" id="seg">
+    <button class="on" onclick="show('list')">List</button>
+    <button onclick="show('multi')">Multi-select</button>
+    <button onclick="show('bulk')">Bulk results</button>
+    <button onclick="show('result')">Results view</button>
+    <button onclick="show('frombulk')">View from bulk</button>
+  </div>
+  <span class="spacer"></span>
+  <button class="tbtn" id="dkbtn" onclick="document.documentElement.classList.toggle('dark');this.textContent=document.documentElement.classList.contains('dark')?'Light':'Dark'">Dark</button>
+</div>
+
+<div class="card">
+
+<!-- LIST VIEW -->
+<div class="view active" id="view-list">
+  <div class="cscroll">
+    <div class="lrow">
+      <span class="flbl">Select Quality Check</span>
+      <button class="icon-btn" onclick="show('multi')">Multi-select</button>
+    </div>
+    <div class="srow">
+      <input class="sinp" placeholder="Search by ref no or supplier..." />
+    </div>
+    <div class="qclist">
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000036</span><span class="qsup">Vikas Supplier</span><span class="qamt">51,35,648</span><span class="qdt">03-09-2026</span></div>
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000038</span><span class="qsup">Golden Rajput Traders</span><span class="qamt">28,67,896</span><span class="qdt">03-09-2026</span></div>
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000039</span><span class="qsup">Ankit Agri Corp</span><span class="qamt">7,80,640</span><span class="qdt">02-09-2026</span></div>
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000023</span><span class="qsup">Sunrise Seeds Ltd</span><span class="qamt">12,34,567</span><span class="qdt">01-09-2026</span></div>
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000016</span><span class="qsup">Madhur Enterprises</span><span class="qamt">9,50,120</span><span class="qdt">28-08-2026</span></div>
+      <div class="qrow" onclick="show('result')"><span class="qref">QC/2026-2027/000028</span><span class="qsup">Patel Grains</span><span class="qamt">4,30,090</span><span class="qdt">25-08-2026</span></div>
+    </div>
+  </div>
+  <div class="cfoot">
+    <button class="key-btn">Set Token</button>
+  </div>
+</div>
+
+<!-- MULTI-SELECT VIEW -->
+<div class="view" id="view-multi">
+  <div class="cscroll">
+    <div class="lrow">
+      <span class="flbl">Select Quality Check</span>
+      <button class="icon-btn on">Multi-select</button>
+    </div>
+    <div class="srow">
+      <input class="sinp" placeholder="Search by ref no or supplier..." />
+      <button class="sel-all">Deselect all</button>
+    </div>
+    <div class="qclist">
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000036</span><span class="qsup">Vikas Supplier</span><span class="qamt">51,35,648</span><span class="qdt">03-09-2026</span></div>
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000038</span><span class="qsup">Golden Rajput Traders</span><span class="qamt">28,67,896</span><span class="qdt">03-09-2026</span></div>
+      <div class="qrow"><span style="font-size:14px;color:var(--dim)">&#9633;</span><span class="qref">QC/2026-2027/000039</span><span class="qsup">Ankit Agri Corp</span><span class="qamt">7,80,640</span><span class="qdt">02-09-2026</span></div>
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000023</span><span class="qsup">Sunrise Seeds Ltd</span><span class="qamt">12,34,567</span><span class="qdt">01-09-2026</span></div>
+    </div>
+    <div class="bbar">
+      <span class="bct">3 QCs selected</span>
+      <button class="run-btn" onclick="show('bulk')">Validate All</button>
+    </div>
+  </div>
+  <div class="cfoot">
+    <button class="foot-link">Refresh</button>
+    <button class="foot-tok">Token set &middot; Change</button>
+  </div>
+</div>
+
+<!-- BULK RESULTS VIEW -->
+<div class="view" id="view-bulk">
+  <div class="cscroll">
+    <div class="lrow">
+      <span class="flbl">Select Quality Check</span>
+      <button class="icon-btn on">Multi-select</button>
+    </div>
+    <div class="srow">
+      <input class="sinp" placeholder="Search by ref no or supplier..." />
+      <button class="sel-all">Deselect all</button>
+    </div>
+    <div class="qclist" style="opacity:.45;pointer-events:none">
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000036</span><span class="qsup">Vikas Supplier</span><span class="qamt">51,35,648</span></div>
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000038</span><span class="qsup">Golden Rajput Traders</span><span class="qamt">28,67,896</span></div>
+      <div class="qrow sel"><span style="font-size:14px;color:var(--brand)">&#10003;</span><span class="qref">QC/2026-2027/000023</span><span class="qsup">Sunrise Seeds Ltd</span><span class="qamt">12,34,567</span></div>
+    </div>
+    <div class="bbar">
+      <span class="bct">3 QCs selected</span>
+      <span style="font-size:11px;color:var(--sub)">3 / 3 done</span>
+    </div>
+    <div class="prog"><div class="progf" style="width:100%"></div></div>
+    <div class="bres">
+      <div class="bres-hdr">
+        <span class="bres-lbl">Bulk Results</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="bres-stat">2 passed &middot; 1 failed</span>
+        </div>
+      </div>
+      <div class="brows">
+        <div class="brow">
+          <span style="color:var(--ok);font-size:15px;flex-shrink:0;margin-top:1px">&#10003;</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px"><span class="bref">QC/2026-2027/000036</span><span class="bsup">Vikas Supplier</span></div>
+          </div>
+          <button class="view-btn" onclick="show('frombulk')">View</button>
+        </div>
+        <div class="brow fail">
+          <span style="color:var(--bad);font-size:15px;flex-shrink:0;margin-top:1px">&#10007;</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px"><span class="bref">QC/2026-2027/000038</span><span class="bsup">Golden Rajput Traders</span></div>
+            <div class="bmsg">3 fields failed</div>
+          </div>
+          <button class="view-btn" onclick="show('frombulk')">View</button>
+        </div>
+        <div class="brow">
+          <span style="color:var(--ok);font-size:15px;flex-shrink:0;margin-top:1px">&#10003;</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px"><span class="bref">QC/2026-2027/000023</span><span class="bsup">Sunrise Seeds Ltd</span></div>
+          </div>
+          <button class="view-btn" onclick="show('frombulk')">View</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cfoot">
+    <button class="foot-link">Refresh</button>
+    <button class="foot-tok">Token set &middot; Change</button>
+  </div>
+</div>
+
+<!-- RESULT VIEW -->
+<div class="view" id="view-result">
+  <div class="cscroll">
+    <div class="rvhdr">
+      <button class="change-btn" onclick="show('list')">Change</button>
+      <span class="rv-st ok">All formulas pass</span>
+    </div>
+    <div class="reccard">
+      <div>
+        <div class="recref">QC/2026-2027/000036</div>
+        <div class="recmeta">03-09-2026 &middot; Vikas Supplier</div>
+      </div>
+      <div class="recbadges">
+        <div class="badge">Total <b>51,35,648.34</b></div>
+        <span class="sc created">Created</span>
+      </div>
+    </div>
+    <!-- Line 1 closed (all pass) -->
+    <div class="ls" id="ls1">
+      <div class="ls-hdr" onclick="tgl('ls1')">
+        <span class="ls-tag">Line 1</span>
+        <span class="ls-title">Item <span class="ls-item">#79</span></span>
+        <span class="ls-badge ok">All passed</span>
+        <span class="chv" id="ls1-c">+</span>
+      </div>
+      <div class="ls-body" id="ls1-b" style="display:none">
+        <div class="specs">
+          <div class="spec"><div class="spec-l">Item</div><div class="spec-v">#79</div></div>
+          <div class="spec"><div class="spec-l">Rate</div><div class="spec-v">45.00</div></div>
+          <div class="spec"><div class="spec-l">GRN qty</div><div class="spec-v">13,000</div></div>
+          <div class="spec"><div class="spec-l">Empty bag wt</div><div class="spec-v">2.4</div></div>
+          <div class="spec"><div class="spec-l">Deduction%</div><div class="spec-v">7%</div></div>
+          <div class="spec"><div class="spec-l">Discount%</div><div class="spec-v">0%</div></div>
+        </div>
+        <div class="tbl-lbl">Line checks</div>
+        <div class="tbl-head"><div class="th">#</div><div class="th">Field</div><div class="th">Formula</div><div class="th r">Expected</div><div class="th r">Actual</div><div class="th"></div></div>
+        <div class="trow"><div class="td-n">01</div><div class="td-f">total_amount</div><div class="td-fmla">GRN qty &times; Base rate</div><div class="td-exact">585000.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">02</div><div class="td-f">empty_bags_txn_amount</div><div class="td-fmla">Empty bag weight &times; Base rate</div><div class="td-exact">108.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">03</div><div class="td-f">alternate_accepted_qty</div><div class="td-fmla">GRN qty &minus; Empty bag weight</div><div class="td-exact">12997.6000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">04</div><div class="td-f">net_of_empty_bag_amount</div><div class="td-fmla">Total amount &minus; Empty bags amount</div><div class="td-exact">584892.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">05</div><div class="td-f">qc_deduction_rate</div><div class="td-fmla">Base rate &times; Deduction% &divide; 100</div><div class="td-exact">3.1500</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">06</div><div class="td-f">qc_deduction_amount</div><div class="td-fmla">Stored rate &times; Accepted qty</div><div class="td-exact">40942.4400</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">07</div><div class="td-f">transaction_amount_without_discount</div><div class="td-fmla">Net amount &minus; QC deduction</div><div class="td-exact">543949.5600</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">08</div><div class="td-f">cash_discount_deduction_amount</div><div class="td-fmla">Subtotal &times; Discount% &divide; 100</div><div class="td-exact">0.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">09</div><div class="td-f">txn_currency_amount</div><div class="td-fmla">Net &minus; (Ded. weight &times; Rate) &minus; Cash discount</div><div class="td-exact">543942.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="tbl-foot ok"><div class="msg">All checks passed</div><span class="fct">9 checks</span></div>
+        <div style="border-top:1px solid var(--ln)">
+          <div class="tbl-lbl">Bags detail</div>
+          <div class="tbl-head"><div class="th">#</div><div class="th">Field</div><div class="th">Formula</div><div class="th r">Expected</div><div class="th r">Actual</div><div class="th"></div></div>
+          <div class="trow"><div class="td-n">01</div><div class="td-f">total_weight_of_bags</div><div class="td-fmla">Sum of (Bag qty &times; Wt per bag &times; UOM conversion)</div><div class="td-exact">2.4000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+          <div class="tbl-foot ok"><div class="msg">All checks passed</div><span class="fct">1 check</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line 2 open (amber rounding warnings) -->
+    <div class="ls" id="ls2">
+      <div class="ls-hdr" onclick="tgl('ls2')">
+        <span class="ls-tag">Line 2</span>
+        <span class="ls-title">Item <span class="ls-item">#81</span></span>
+        <span class="ls-badge ok">All passed</span>
+        <span class="chv" id="ls2-c">-</span>
+      </div>
+      <div class="ls-body" id="ls2-b">
+        <div class="specs">
+          <div class="spec"><div class="spec-l">Item</div><div class="spec-v">#81</div></div>
+          <div class="spec"><div class="spec-l">Rate</div><div class="spec-v">5851.32</div></div>
+          <div class="spec"><div class="spec-l">GRN qty</div><div class="spec-v">810</div></div>
+          <div class="spec"><div class="spec-l">Empty bag wt</div><div class="spec-v">1.0</div></div>
+          <div class="spec"><div class="spec-l">Deduction%</div><div class="spec-v">3%</div></div>
+          <div class="spec"><div class="spec-l">Discount%</div><div class="spec-v">0%</div></div>
+        </div>
+        <div class="tbl-lbl">Line checks</div>
+        <div class="tbl-head"><div class="th">#</div><div class="th">Field</div><div class="th">Formula</div><div class="th r">Expected</div><div class="th r">Actual</div><div class="th"></div></div>
+        <div class="trow"><div class="td-n">01</div><div class="td-f">total_amount</div><div class="td-fmla">GRN qty &times; Base rate</div><div class="td-exact">4739569.2000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">02</div><div class="td-f">empty_bags_txn_amount</div><div class="td-fmla">Empty bag weight &times; Base rate</div><div class="td-exact">5851.3200</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">03</div><div class="td-f">alternate_accepted_qty</div><div class="td-fmla">GRN qty &minus; Empty bag weight</div><div class="td-exact">809.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">04</div><div class="td-f">net_of_empty_bag_amount</div><div class="td-fmla">Total amount &minus; Empty bags amount</div><div class="td-exact">4733717.8800</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow amb">
+          <div class="td-n">05</div>
+          <div class="td-f">qc_deduction_rate<span class="td-note">approx delta 0.000400 &mdash; ERP rounds to 4 dp</span></div>
+          <div class="td-fmla">Base rate &times; Deduction% &divide; 100</div>
+          <div class="td-exp">175.5396</div>
+          <div class="td-act">175.5400</div>
+          <div class="td-ic" style="color:var(--ok)">&#10003;</div>
+        </div>
+        <div class="trow"><div class="td-n">06</div><div class="td-f">qc_deduction_amount</div><div class="td-fmla">Stored rate &times; Accepted qty</div><div class="td-exact">142011.8600</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">07</div><div class="td-f">transaction_amount_without_discount</div><div class="td-fmla">Net amount &minus; QC deduction</div><div class="td-exact">4591706.0200</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow"><div class="td-n">08</div><div class="td-f">cash_discount_deduction_amount</div><div class="td-fmla">Subtotal &times; Discount% &divide; 100</div><div class="td-exact">0.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+        <div class="trow amb">
+          <div class="td-n">09</div>
+          <div class="td-f">txn_currency_amount<span class="td-note">approx delta 0.003600 &mdash; ERP rounds to 2 dp</span></div>
+          <div class="td-fmla">Net &minus; (Ded. weight &times; Rate) &minus; Cash discount</div>
+          <div class="td-exp">4591706.3436</div>
+          <div class="td-act">4591706.3400</div>
+          <div class="td-ic" style="color:var(--ok)">&#10003;</div>
+        </div>
+        <div class="tbl-foot ok"><div class="msg">All checks passed</div><span class="fct">9 checks</span></div>
+        <div style="border-top:1px solid var(--ln)">
+          <div class="tbl-lbl">Bags detail</div>
+          <div class="tbl-head"><div class="th">#</div><div class="th">Field</div><div class="th">Formula</div><div class="th r">Expected</div><div class="th r">Actual</div><div class="th"></div></div>
+          <div class="trow"><div class="td-n">01</div><div class="td-f">total_weight_of_bags</div><div class="td-fmla">Sum of (Bag qty &times; Wt per bag &times; UOM conversion)</div><div class="td-exact">1.0000</div><div class="td-ic" style="color:var(--ok)">&#10003;</div></div>
+          <div class="tbl-foot ok"><div class="msg">All checks passed</div><span class="fct">1 check</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cfoot">
+    <button class="foot-link">Refresh</button>
+    <button class="foot-tok">Token set &middot; Change</button>
+  </div>
+</div>
+
+<!-- VIEW FROM BULK -->
+<div class="view" id="view-frombulk">
+  <div class="cscroll">
+    <div class="rvhdr">
+      <button class="back-btn" onclick="show('bulk')">&larr; Back to results</button>
+      <span class="rv-st ok">All formulas pass</span>
+    </div>
+    <div class="reccard">
+      <div>
+        <div class="recref">QC/2026-2027/000036</div>
+        <div class="recmeta">03-09-2026 &middot; Vikas Supplier</div>
+      </div>
+      <div class="recbadges">
+        <div class="badge">Total <b>51,35,648.34</b></div>
+        <span class="sc created">Created</span>
+      </div>
+    </div>
+    <div style="color:var(--dim);font-size:11px;text-align:center;padding:12px 0;border:1px dashed var(--ln);border-radius:8px">
+      Same trail + line sections as Results view
+    </div>
+  </div>
+  <div class="cfoot">
+    <button class="foot-link">Refresh</button>
+    <button class="foot-tok">Token set &middot; Change</button>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+function show(v) {
+  var all = document.querySelectorAll('.view');
+  for (var i = 0; i < all.length; i++) all[i].classList.remove('active');
+  document.getElementById('view-' + v).classList.add('active');
+  var btns = document.querySelectorAll('#seg button');
+  var map = ['list','multi','bulk','result','frombulk'];
+  for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('on', map[j] === v);
+  if (v === 'result' || v === 'frombulk') {
+    // ensure first line section is open, rest closed
+    var lines = document.querySelectorAll('#view-' + v + ' .ls');
+    lines.forEach(function(ls, idx) {
+      var id = ls.id;
+      var body = document.getElementById(id + '-b');
+      var chv = document.getElementById(id + '-c');
+      if (!body || !chv) return;
+      if (idx === 0) {
+        body.style.display = '';
+        chv.textContent = '-';
+      } else {
+        body.style.display = 'none';
+        chv.textContent = '+';
+      }
+    });
+    // scroll so the first line section is centered in viewport
+    setTimeout(function() {
+      var firstLine = document.querySelector('#view-' + v + ' .ls');
+      if (firstLine) {
+        firstLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+  }
+}
+function tgl(id) {
+  var b = document.getElementById(id + '-b');
+  var c = document.getElementById(id + '-c');
+  var open = b.style.display !== 'none';
+  b.style.display = open ? 'none' : '';
+  c.textContent = open ? '+' : '-';
+}
+</script>
+</body>
+</html>

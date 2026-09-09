@@ -134,6 +134,15 @@ function calcTieredDeduction(actualVal: number, allowable: number, ranges: CQPRa
     .filter(rng => rng.quality_type === qualityType)
     .sort((a, b) => a.min - b.min)
 
+  // No CQP tiers configured for this quality type — ERP falls back to plain excess
+  if (tiers.length === 0) {
+    const excess = r(Math.max(0, actualVal - allowable))
+    return {
+      deduction: excess,
+      formulaStr: excess > 0 ? `${actualVal}−${allowable} (no CQP tiers → raw excess)` : `${actualVal} ≤ ${allowable}`,
+    }
+  }
+
   let deduction = 0
   let prevMax = 0
   const tierParts: string[] = []
