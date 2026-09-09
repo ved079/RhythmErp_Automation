@@ -33,8 +33,16 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         timestamp=start_ts,
     ))
 
+    # Route to the right chain class based on requested documents:
+    #   PO→QC→PB (no GP/GRN) → POQCPBChain (CQP slab deduction)
+    #   everything else       → FullChain   (random bag weight / deduction)
+    docs_upper = set(d.upper() for d in (request.documents or []))
+    use_po_qc_pb = bool(docs_upper) and not (docs_upper & {"GP", "GRN"})
     try:
-        from pages.private_b2b.scripts.purchase_chain import PurchaseChain
+        if use_po_qc_pb:
+            from pages.private_b2b.scripts.chain_po_qc_pb import POQCPBChain as PurchaseChain
+        else:
+            from pages.private_b2b.scripts.chain_full import FullChain as PurchaseChain
     except ImportError as e:
         yield _sse_event(LogEvent(
             type="error",
