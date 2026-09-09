@@ -454,12 +454,17 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         # uom_conversion_kg converts from kg to the item's UOM (e.g. 0.001 for MT).
         uom_id = it.get("uom") or it.get("base_uom")
         uom_conversion_kg = float((kg_to_uom_factors or {}).get(uom_id, 1.0)) if uom_id else 1.0
-        weight_of_bags = round(random.uniform(_BAG_WEIGHT_MIN, _BAG_WEIGHT_MAX), 2)
         quantity_of_bags = 1
+        # Target empty_bag_weight = 3–5 % of received qty (always positive).
+        # Back-calculate weight_of_bags from the target so the bags detail
+        # stays consistent with the QC line computation.
+        #   total_weight_of_bags = quantity_of_bags × weight_of_bags × uom_conversion_kg
+        # → weight_of_bags = target_total / (quantity_of_bags × uom_conversion_kg)
+        target_total = round(it["accepted_qty"] * random.uniform(0.03, 0.05), 6)
+        empty_bag_weight = max(target_total, 0.0)
+        denom = quantity_of_bags * (uom_conversion_kg if uom_conversion_kg > 0 else 1.0)
+        weight_of_bags = round(target_total / denom, 6)
         total_weight_of_bags = round(quantity_of_bags * weight_of_bags * uom_conversion_kg, 6)
-        # Cap at 5 % of received qty so alternate_accepted_qty is always positive.
-        empty_bag_weight = min(total_weight_of_bags, round(it["accepted_qty"] * 0.05, 6))
-        empty_bag_weight = max(empty_bag_weight, 0.0)
 
         deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
