@@ -556,8 +556,18 @@ def _qc_items_from_random(items: List[dict], ctx=None, cqp_by_item: Optional[dic
 
         item_id = it["item_ref_id"]
         grn_qty = it["accepted_qty"]
-        param_rows = [{"quantity_deduction": 0, **p} for p in quality_details]
-        deduction_percent = _rand_deduction_percent()
+        # quantity_deduction per param = actual_value − allowable_percent (matches
+        # manual GP QC where user enters actual=1, allowable=0 → ded=1 per param).
+        # deduction_percent = sum(quantity_deductions), same as ERP computes it.
+        param_rows = []
+        for p in quality_details:
+            actual_val = float(p.get("actual_value") or 1)
+            allowable = float(p.get("allowable_percent") or 0.0)
+            qty_ded = round(actual_val - allowable, 3)
+            param_rows.append({**p, "quantity_deduction": qty_ded, "allowable_percent": allowable})
+        deduction_percent = round(sum(p["quantity_deduction"] for p in param_rows), 3)
+        if deduction_percent <= 0:
+            deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
             it["rate"], grn_qty, empty_bag_weight, deduction_percent, discount_rate,
