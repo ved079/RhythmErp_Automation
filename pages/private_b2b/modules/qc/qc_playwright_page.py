@@ -28,13 +28,20 @@ class QCPlaywrightPage(BasePlaywrightPage):
     ACCEPTED_QTY    = "xpath=//mat-form-field[.//mat-label[contains(.,'Accepted Quantity')]]//input"
     DEDUCTION_PCT   = "xpath=//mat-form-field[.//mat-label[contains(.,'Deduction(%)')]]//input"
     DEDUCTION_RATE  = "xpath=//mat-form-field[.//mat-label[contains(.,'Deduction Rate')]]//input"
-    QC_RATE         = "xpath=//mat-form-field[.//mat-label[contains(.,'QC Rate')]]//input"
+    QC_RATE         = "xpath=//mat-form-field[.//mat-label[contains(.,'QC Deduction Rate') or contains(.,'QC Rate')]]//input"
     TXN_AMOUNT      = "xpath=//mat-form-field[.//mat-label[contains(.,'Transaction Amount') and not(contains(.,'Total'))]]//input"
 
     # QC Parameter popup
     QC_PARAM_BTN  = "button.apply-button[data-sd-details-opener*='qc_parameter_details']"
     ACTUAL_VALUE  = "xpath=//mat-form-field[.//mat-label[contains(.,'Actual Value')]]//input"
     DONE_BTN      = "xpath=//button[contains(.,'Done')]"
+
+    # Bags Parameter popup
+    BAGS_PARAM_BTN     = "button.apply-button[data-sd-details-opener*='qc_bags_details']"
+    BAGS_TYPE_SELECT   = "xpath=//mat-form-field[.//mat-label[contains(.,'Type of Bag')]]//mat-select"
+    BAGS_NO_INPUT      = "xpath=//input[@name='No of  Bags']"
+    BAGS_WEIGHT_INPUT  = "xpath=//input[@name='Per Bag Weight']"
+    BAGS_DONE_BTN      = "xpath=//button[contains(@class,'btn-save') and contains(.,'Done')]"
 
     # Buttons
     ADD_BTN    = "button.erp-add-btn"
@@ -287,6 +294,47 @@ class QCPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         self._fill_nth(self.CONVERSION_RATE, 0, "1")
 
+    # ── Bags Parameter popup ─────────────────────────────────────────────
+
+    def fill_bags_popup(self, row_index=0, no_of_bags="1", per_bag_weight=None):
+        """Open Bags Parameter popup, fill required fields, click Done."""
+        self.page.locator(self.BAGS_PARAM_BTN).nth(row_index).click(force=True)
+        self.page.wait_for_selector(self.BAGS_TYPE_SELECT, timeout=10000)
+        self.page.wait_for_timeout(500)
+
+        # 0.01 ensures Total Weight (= No of Bags × Per Bag Weight) is always
+        # less than Received Quantity, so Net of Empty Bag Qty stays positive
+        if per_bag_weight is None:
+            per_bag_weight = "0.01"
+
+        # Select first real Type of Bag option (skip the "Select Options" clear placeholder)
+        self.page.locator(self.BAGS_TYPE_SELECT).click()
+        self.page.wait_for_selector("mat-option.dd-option:not(.dd-clear-option)", timeout=5000)
+        self.page.locator("mat-option.dd-option:not(.dd-clear-option)").first.click()
+        self.page.wait_for_timeout(300)
+
+        def _js_fill(placeholder, value):
+            self.page.evaluate("""
+                ([ph, val]) => {
+                    const inputs = Array.from(document.querySelectorAll('input[placeholder="' + ph + '"]'))
+                                       .filter(el => el.offsetParent !== null && !el.disabled && !el.readOnly);
+                    const el = inputs[0];
+                    if (!el) return;
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    el.blur();
+                }
+            """, [placeholder, str(value)])
+            self.page.wait_for_timeout(300)
+
+        _js_fill("No of  Bag", no_of_bags)
+        _js_fill("Per Bag Weight", per_bag_weight)
+
+        self.page.locator(self.BAGS_DONE_BTN).click()
+        self.page.wait_for_timeout(500)
+
     # ── QC Parameter popup ───────────────────────────────────────────────
 
     def open_qc_param_popup(self, row_index=0):
@@ -307,16 +355,13 @@ class QCPlaywrightPage(BasePlaywrightPage):
             "xpath=//button[contains(.,'Done')]"
             "/ancestor::div[.//input[@placeholder='Actual Value']][1]"
         )
-        # Read param labels from Quality Parameter mat-select column only
-        label_sel = (
-            popup_ancestor +
-            "//mat-form-field[.//*[contains(.,'Quality Parameter')]]"
-            "//mat-mdc-select-min-line"
-        )
-        popup_labels = [
-            el.inner_text().strip()
-            for el in self.page.locator(label_sel).all()
-        ]
+        # Read param labels via JS — .mat-mdc-select-min-line is a class on <span>, not a tag
+        popup_labels = self.page.evaluate("""
+            () => Array.from(document.querySelectorAll('.mat-mdc-select-min-line'))
+                      .filter(el => el.offsetParent !== null)
+                      .map(el => el.textContent.trim())
+                      .filter(t => t.length > 0)
+        """)
 
         # Build param_name → value map from CQP config for this row's item
         item_names  = getattr(self, "item_names", [])
@@ -337,11 +382,11 @@ class QCPlaywrightPage(BasePlaywrightPage):
             for lbl in popup_labels:
                 if lbl in param_value_map:
                     ordered.append(param_value_map[lbl])
-            if len(ordered) == len(popup_labels):
-                print(f"[QC-fill] label-matched order: {list(zip(popup_labels, ordered))}")
+            if len(ordered) == len(actual_values):
+                print(f"[QC-fill] label-matched order: {[f'{k}={v}' for k, v in zip([l for l in popup_labels if l in param_value_map], ordered)]}")
                 actual_values = ordered
             else:
-                print(f"[QC-fill] label match incomplete ({len(ordered)}/{len(popup_labels)}), using positional")
+                print(f"[QC-fill] label match incomplete ({len(ordered)}/{len(actual_values)}), using positional")
 
         print(f"[QC-fill] filling values: {actual_values}")
         scope = popup_ancestor + "//input[@placeholder='Actual Value']"
