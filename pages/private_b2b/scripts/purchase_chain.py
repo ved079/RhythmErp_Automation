@@ -1737,21 +1737,27 @@ class PurchaseChain:
                 pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
                 log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref}")
 
-                # Verify the PB survived async accounting (ERP rolls it back on failure).
-                # Poll up to 8s, then retry once after a 12s cooldown if rolled back.
+                # Verify the PB survived async accounting and was posted.
+                # ERP rolls back the PB on accounting failure; even if the ID briefly
+                # exists, posting_status must be "Post" to confirm the entry is live.
+                # Poll up to ~20s (3+5+7+5), retry once after 12s cooldown if not posted.
                 _pb_confirmed = False
                 for _attempt in range(2):
-                    for _wait in (3, 5):
+                    for _wait in (3, 5, 7, 5):
                         time.sleep(_wait)
                         _check = self.pb_api.get_pb(pb_id)
-                        if _check and _check.get("id"):
+                        _status = (_check or {}).get("posting_status", "")
+                        if _check and _check.get("id") and _status == "Post":
                             _pb_confirmed = True
                             break
+                        if _check and _check.get("id") and _status:
+                            log.info(f"  PB {pb_id} exists but posting_status={_status!r} — waiting…")
                     if _pb_confirmed:
                         break
                     if _attempt == 0:
                         log.warning(
-                            f"  PB {pb_id} not found after accounting wait — ERP may have rolled it back. "
+                            f"  PB {pb_id} not posted after accounting wait "
+                            f"(posting_status={_status!r}) — ERP may have rolled it back. "
                             f"Waiting 12s and retrying PB creation…"
                         )
                         time.sleep(12)
@@ -1764,7 +1770,10 @@ class PurchaseChain:
                         log.info(f"  PB retry created: ID={pb_id}, ref={pb_ref}")
 
                 if not _pb_confirmed:
-                    log.warning(f"  PB {pb_id} still not confirmed after retry — accounting may have failed.")
+                    log.warning(
+                        f"  PB {pb_id} still not confirmed after retry — "
+                        f"accounting failed (check Inventory AD conditions for item type)."
+                    )
 
                 pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload})
                 if self.delay:
