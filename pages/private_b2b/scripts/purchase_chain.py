@@ -1583,7 +1583,7 @@ class PurchaseChain:
             if "QC" in docs and not self._resolve_cqp_params(iid):
                 skipped_no_cqp.append(iid)
                 continue
-            det["tax_rate"] = float(random.choice(rates)) if rates else 0.0
+            det["tax_rate"] = float(min(rates)) if rates else 0.0
             item_data.append(det)
         if skipped_no_rate:
             log.info(
