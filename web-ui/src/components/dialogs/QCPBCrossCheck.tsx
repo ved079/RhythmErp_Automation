@@ -72,17 +72,32 @@ function buildCrossRows(qcLine: any, pbLine: any): CrossRow[] {
     return { field, qcPath, pbPath, qcVal, pbVal, ok, note }
   }
 
+  // qc_deduction_rate: QC stores it; PB derives it as qc_deduction_amount / alternate_net_qty
+  const pbDeductionRate = pbLine.alternate_net_qty
+    ? r(pbLine.qc_deduction_amount / pbLine.alternate_net_qty)
+    : undefined
+  // deduction_percent: QC stores it; PB derives it as qc_deduction_amount / net_of_empty_bag_amount * 100
+  const pbDeductionPct = pbLine.net_of_empty_bag_amount
+    ? r(pbLine.qc_deduction_amount / pbLine.net_of_empty_bag_amount * 100)
+    : undefined
+
   return [
-    row('base_rate',          'base_rate',                   'base_rate',                      qcLine.base_rate,                       pbLine.base_rate),
-    row('grn_qty',            'grn_qty',                     'alternate_gate_pass_quantity',    qcLine.grn_qty,                         pbLine.alternate_gate_pass_quantity),
-    row('empty_bag_weight',   'empty_bag_weight',            'empty_bag_weight',                qcLine.empty_bag_weight,                pbLine.empty_bag_weight),
-    row('accepted_qty',       'alternate_accepted_qty',      'alternate_net_qty',               qcLine.alternate_accepted_qty,          pbLine.alternate_net_qty),
-    row('empty_bags_amount',  'empty_bags_txn_amount',       'empty_bags_txn_amount',           qcLine.empty_bags_txn_amount,           pbLine.empty_bags_txn_amount),
-    row('net_of_empty_bag',   'net_of_empty_bag_amount',     'net_of_empty_bag_amount',         qcLine.net_of_empty_bag_amount,         pbLine.net_of_empty_bag_amount),
-    row('deduction_weight',   'deduction_weight',            'alternate_deduction_weight',      qcLine.deduction_weight,                pbLine.alternate_deduction_weight),
-    row('qc_deduction_amount','qc_deduction_amount',         'qc_deduction_amount',             qcLine.qc_deduction_amount,             pbLine.qc_deduction_amount),
+    row('base_rate',           'base_rate',                   'base_rate',                      qcLine.base_rate,                       pbLine.base_rate),
+    row('grn_qty',             'grn_qty',                     'alternate_gate_pass_quantity',    qcLine.grn_qty,                         pbLine.alternate_gate_pass_quantity),
+    row('no_of_bags',          'no_of_bags',                  'no_of_bags',                     qcLine.no_of_bags,                      pbLine.no_of_bags),
+    row('empty_bag_weight',    'empty_bag_weight',            'empty_bag_weight',                qcLine.empty_bag_weight,                pbLine.empty_bag_weight),
+    row('accepted_qty',        'alternate_accepted_qty',      'alternate_net_qty',               qcLine.alternate_accepted_qty,          pbLine.alternate_net_qty),
+    row('rejected_qty',        'alternate_rejected_qty',      'qc_alternate_rejected_qty',       qcLine.alternate_rejected_qty,          pbLine.qc_alternate_rejected_qty),
+    row('gross_amount',        'total_amount',                'total_amount',                    qcLine.total_amount,                    pbLine.total_amount),
+    row('empty_bags_amount',   'empty_bags_txn_amount',       'empty_bags_txn_amount',           qcLine.empty_bags_txn_amount,           pbLine.empty_bags_txn_amount),
+    row('net_of_empty_bag',    'net_of_empty_bag_amount',     'net_of_empty_bag_amount',         qcLine.net_of_empty_bag_amount,         pbLine.net_of_empty_bag_amount),
+    row('deduction_percent',   'deduction_percent',           'qc_ded_amt/net_of_empty_bag×100', qcLine.deduction_percent,               pbDeductionPct, 'PB-derived'),
+    row('qc_deduction_rate',   'qc_deduction_rate',           'qc_ded_amt/alternate_net_qty',    qcLine.qc_deduction_rate,               pbDeductionRate, 'PB-derived'),
+    row('deduction_weight',    'deduction_weight',            'alternate_deduction_weight',      qcLine.deduction_weight,                pbLine.alternate_deduction_weight),
+    row('qc_deduction_amount', 'qc_deduction_amount',         'qc_deduction_amount',             qcLine.qc_deduction_amount,             pbLine.qc_deduction_amount),
+    row('cd_deduction',        'c_d_deduction',               'alternate_c_d_deduction',         qcLine.c_d_deduction,                   pbLine.alternate_c_d_deduction),
     row('txn_without_discount','transaction_amount_without_discount','transaction_amount_without_discount', qcLine.transaction_amount_without_discount, pbLine.transaction_amount_without_discount),
-    row('net_purchase_rate',  'rate',                        'rate',                            qcLine.rate,                            pbLine.rate),
+    row('net_purchase_rate',   'rate',                        'rate',                            qcLine.rate,                            pbLine.rate),
   ]
 }
 
