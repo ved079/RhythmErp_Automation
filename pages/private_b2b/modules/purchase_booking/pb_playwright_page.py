@@ -184,6 +184,8 @@ class PBPlaywrightPage(BasePlaywrightPage):
 
     def fill_conversion_rate(self, value=1):
         field = self.page.locator(self.CONVERSION_RATE).first
+        if field.count() == 0 or not field.is_visible():
+            return
         field.click(force=True)
         field.fill(str(value))
         field.press("Tab")
@@ -303,20 +305,38 @@ class PBPlaywrightPage(BasePlaywrightPage):
 
     def submit(self):
         self.page.locator(self.SUBMIT_BTN).click()
+
+        # ERP shows a tracking card instead of swal2 — wait for it to appear first
         try:
-            self.page.wait_for_selector(".swal2-container", timeout=8000)
+            self.page.wait_for_selector(".tracking-card", timeout=8000)
+        except Exception:
+            pass
+
+        # Check for swal2 validation error (shown before tracking card on bad input)
+        try:
+            self.page.wait_for_selector(".swal2-container", timeout=3000)
             title = self.page.locator("#swal2-title").inner_text().strip()
             if any(w in title for w in ("Validation", "Failed", "Error")):
                 msg = self.page.locator("#swal2-html-container").inner_text().strip()
                 self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
                 raise RuntimeError(f"PB creation failed — {title}: {msg}")
             self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
-            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=10000)
         except RuntimeError:
             raise
         except Exception:
             pass
+
+        # Wait for tracking card to finish (disappears when all steps done) — up to 60s
+        try:
+            self.page.wait_for_selector(".tracking-card", state="hidden", timeout=60000)
+        except Exception:
+            pass
+
         self.navigate_to_page()
+        return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
+
+    def get_ref_no_of_first_row(self):
+        self.page.wait_for_selector(self.REF_NO_COL, timeout=10000)
         return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
 
     def create_for_integration(self, supplier_name, qc_ref_no):
