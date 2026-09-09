@@ -546,6 +546,13 @@ def _qc_items_from_random(items: List[dict], ctx=None, cqp_by_item: Optional[dic
         total_weight_of_bags = round(quantity_of_bags * weight_of_bags * uom_conversion_kg, 6)
         empty_bag_weight = min(total_weight_of_bags, round(it["accepted_qty"] * 0.05, 6))
         empty_bag_weight = max(empty_bag_weight, 0.0)
+        # If cap reduced empty_bag_weight below total_weight_of_bags, back-calculate
+        # weight_of_bags so the bags detail row stays internally consistent.
+        # (ERP recalculates total_weight_of_bags = empty_bag_weight on its end.)
+        if empty_bag_weight < total_weight_of_bags:
+            denom = quantity_of_bags * (uom_conversion_kg if uom_conversion_kg > 0 else 1.0)
+            weight_of_bags = round(empty_bag_weight / denom, 6)
+            total_weight_of_bags = empty_bag_weight
 
         item_id = it["item_ref_id"]
         grn_qty = it["accepted_qty"]
