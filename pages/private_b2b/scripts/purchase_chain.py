@@ -246,7 +246,7 @@ def _generate_chain_items(
                 "quantity": qty,
                 "rate": rate,
                 "tax_rate": data.get("tax_rate", 0.0),
-                "no_of_bags": int(qty),
+                "no_of_bags": 1,
                 "expected_delivery_date": today,
                 "received_qty": qty,
                 "accepted_qty": qty,
@@ -270,7 +270,7 @@ def _generate_chain_items(
             "quantity": qty,
             "rate": rate,
             "tax_rate": 0.0,
-            "no_of_bags": int(qty),
+            "no_of_bags": 1,
             "expected_delivery_date": today,
             "received_qty": qty,
             "accepted_qty": qty,
@@ -417,34 +417,40 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
     )
     cqp_by_item = cqp_by_item or {}
 
-    def _param_details(item_id: int) -> List[dict]:
+    def _param_details(item_id: int, grn_qty: float) -> List[dict]:
         cqp = cqp_by_item.get(item_id)
         if cqp:
-            # One row per unique quality_type.
-            # allowable_percent = max_quality_value of the first slab (ERP derives
-            # the stored allowable_percent field from this).
-            # actual_value = max_quality_value of first slab (= allowable threshold).
-            # First slab always has multiplier=0, so Difference × 0 = 0 deduction per param.
-            seen: dict = {}
+            # Group all slab rows by quality_type, sorted by min_quality_value.
+            # Slab1 (multiplier=0): defines the allowable threshold (max_q of slab1).
+            # Slab2 (multiplier>0): defines the deduction rate per unit excess.
+            # actual_value = slab1_max_q + 0.1 (just into slab2).
+            # quantity_deduction = excess × slab2_multiplier × grn_qty
+            slabs: dict = {}
             for p in cqp:
                 qt = p.get("quality_type")
-                if qt is not None and qt not in seen:
-                    min_q = float(p.get("min_quality_value") or 0.0)
-                    max_q = float(p.get("max_quality_value") or 0.0)
-                    allowable = round(max_q, 2)
-                    # actual_value = allowable + 0.1 puts it just inside slab2.
-                    # Slab1 has multiplier=0 → 0% deduction; ERP rejects 0%.
-                    # Slab2 gives a tiny positive deduction that the ERP accepts.
-                    actual = round(max_q + 0.1, 2)
-                    seen[qt] = {
-                        "actual_value": actual,
-                        "allowable_percent": allowable,
-                    }
-            return [
-                {"item_quality_parameter_ref_id": qt, **v}
-                for qt, v in seen.items()
-            ]
-        return list(quality_details)
+                if qt is not None:
+                    slabs.setdefault(qt, []).append(p)
+            result = []
+            for qt, rows in slabs.items():
+                rows_sorted = sorted(rows, key=lambda r: float(r.get("min_quality_value") or 0))
+                slab1 = rows_sorted[0]
+                slab2 = rows_sorted[1] if len(rows_sorted) > 1 else None
+                slab1_max_q = float(slab1.get("max_quality_value") or 0.0)
+                allowable = round(slab1_max_q, 2)
+                actual = round(slab1_max_q + 0.1, 2)
+                if slab2 and float(slab2.get("multiplier") or 0) > 0:
+                    mult2 = float(slab2["multiplier"])
+                    quantity_deduction = round((actual - allowable) * mult2 * grn_qty, 3)
+                else:
+                    quantity_deduction = 0.0
+                result.append({
+                    "item_quality_parameter_ref_id": qt,
+                    "actual_value": actual,
+                    "allowable_percent": allowable,
+                    "quantity_deduction": quantity_deduction,
+                })
+            return result
+        return [{"quantity_deduction": 0, **p} for p in quality_details]
 
     out = []
     for it in items:
@@ -466,13 +472,16 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         weight_of_bags = round(target_total / denom, 6)
         total_weight_of_bags = round(quantity_of_bags * weight_of_bags * uom_conversion_kg, 6)
 
-        deduction_percent = _rand_deduction_percent()
+        item_id = it["item_ref_id"]
+        grn_qty = it["accepted_qty"]
+        param_rows = _param_details(item_id, grn_qty)
+        # deduction_percent = sum of per-param quantity_deductions (ERP-stored shape).
+        deduction_percent = round(sum(p.get("quantity_deduction", 0) for p in param_rows), 6)
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
-            it["rate"], it["accepted_qty"], empty_bag_weight, deduction_percent, discount_rate,
+            it["rate"], grn_qty, empty_bag_weight, deduction_percent, discount_rate,
             is_rate_weight_deduction=is_rate_weight_deduction,
         )
-        item_id = it["item_ref_id"]
         out.append({
             "item_ref_id": item_id,
             "is_rate_weight_deduction": is_rate_weight_deduction,
@@ -480,10 +489,10 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
             "uom": it.get("base_uom", ctx.base_uom if ctx else 4),
             "hsn_sac_no": it["hsn_sac_no"],
             "base_rate": it["rate"],
-            "grn_qty": it["accepted_qty"],
+            "grn_qty": grn_qty,
             "alternate_rejected_qty": it["rejected_qty"],
             "total_amount": computed["total_amount"],
-            "no_of_bags": it["no_of_bags"],
+            "no_of_bags": 1,
             "empty_bag_weight": empty_bag_weight,
             "empty_bags_txn_amount": computed["empty_bags_txn_amount"],
             "alternate_accepted_qty": computed["alternate_accepted_qty"],
@@ -495,11 +504,8 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
             "c_d_deduction": computed["c_d_deduction"],
             "txn_currency_amount": computed["txn_currency_amount"],
             "rate": computed["rate"],
-            "uom_conversion": 1.0,
-            "qc_parameter_details": [
-                {**p, "quantity_deduction": 0}
-                for p in _param_details(item_id)
-            ],
+            "uom_conversion": it.get("uom_conversion", 1.0),
+            "qc_parameter_details": param_rows,
             "qc_bags_details": [
                 {
                     "type_of_bags_ref_id": bags_type_id,
@@ -1558,6 +1564,11 @@ class PurchaseChain:
                 supplier_det=supplier_det, po_defaults=po_defaults,
                 item_category_id=cat_id,
             )
+            # Sync the supplier's resolved txn_currency back to ctx so that
+            # downstream QC and PB payloads use the correct currency (not the
+            # default dropdown value that ChainContextDiscoverer sets).
+            if ctx and po_payload.get("txn_currency"):
+                ctx.txn_currency = po_payload["txn_currency"]
             po_data = self.po_api.create_po(po_payload)
             po_id = po_data.get("id") or po_data.get("entry_id") if po_data else None
             if not po_data or not po_id:
