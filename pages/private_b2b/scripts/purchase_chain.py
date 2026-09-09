@@ -120,10 +120,10 @@ def _supplier_name(sid: int) -> str:
 # Realistic pseudo-random ranges for auto-generated lines (single source of
 # truth for the generated quantities/rates; adjust ranges freely). These stay
 # dynamic — a fresh value is drawn per item per run, never baked per item.
-_QTY_MIN = 500
-_QTY_MAX = 2000
+_QTY_MIN = 1
+_QTY_MAX = 2
 _RATE_MIN = 500.0
-_RATE_MAX = 6000.0
+_RATE_MAX = 2000.0
 
 
 def _rand_qty() -> float:
@@ -477,6 +477,80 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         param_rows = _param_details(item_id)
         # deduction_percent = sum of per-param quantity_deductions (ERP-stored shape).
         deduction_percent = round(sum(p.get("quantity_deduction", 0) for p in param_rows), 3)
+        discount_rate = _rand_discount_rate() if qc_discount else 0.0
+        computed = _compute_qc_line_fields(
+            it["rate"], grn_qty, empty_bag_weight, deduction_percent, discount_rate,
+            is_rate_weight_deduction=is_rate_weight_deduction,
+        )
+        out.append({
+            "item_ref_id": item_id,
+            "is_rate_weight_deduction": is_rate_weight_deduction,
+            "alternate_uom": it.get("uom", ctx.alternate_uom if ctx else 3),
+            "uom": it.get("base_uom", ctx.base_uom if ctx else 4),
+            "hsn_sac_no": it["hsn_sac_no"],
+            "base_rate": it["rate"],
+            "grn_qty": grn_qty,
+            "alternate_rejected_qty": it["rejected_qty"],
+            "total_amount": computed["total_amount"],
+            "no_of_bags": 1,
+            "empty_bag_weight": empty_bag_weight,
+            "empty_bags_txn_amount": computed["empty_bags_txn_amount"],
+            "alternate_accepted_qty": computed["alternate_accepted_qty"],
+            "deduction_percent": deduction_percent,
+            "qc_deduction_rate": computed["qc_deduction_rate"],
+            "deduction_weight": computed["deduction_weight"],
+            "qc_deduction_amount": computed["qc_deduction_amount"],
+            "discount_rate": discount_rate,
+            "c_d_deduction": computed["c_d_deduction"],
+            "txn_currency_amount": computed["txn_currency_amount"],
+            "rate": computed["rate"],
+            "uom_conversion": it.get("uom_conversion", 1.0),
+            "qc_parameter_details": param_rows,
+            "qc_bags_details": [
+                {
+                    "type_of_bags_ref_id": bags_type_id,
+                    "quantity_of_bags": quantity_of_bags,
+                    "weight_of_bags": weight_of_bags,
+                    "uom_conversion_kg": uom_conversion_kg,
+                    "total_weight_of_bags": total_weight_of_bags,
+                }
+            ],
+        })
+    return out
+
+
+def _qc_items_from_random(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None,
+                          bags_type_id: int = 1, qc_discount: bool = True,
+                          is_rate_weight_deduction: bool = False,
+                          kg_to_uom_factors: Optional[dict] = None) -> List[dict]:
+    """GP-flow QC items: random bag weight capped at 5%, random deduction_percent.
+
+    This is the original logic used by the PO→GP→GRN→QC→PB flow. Items in this
+    flow (item_category=1) typically have no slab2 in CQP, so CQP-based deduction
+    produces 0.0. The random approach produces realistic 0–5% deductions instead.
+    """
+    quality_details = (
+        ctx.quality_parameters if ctx and ctx.quality_parameters
+        else [
+            {"item_quality_parameter_ref_id": 1, "actual_value": 1},
+            {"item_quality_parameter_ref_id": 2, "actual_value": 1},
+            {"item_quality_parameter_ref_id": 3, "actual_value": 1},
+        ]
+    )
+    out = []
+    for it in items:
+        uom_id = it.get("uom") or it.get("base_uom")
+        uom_conversion_kg = float((kg_to_uom_factors or {}).get(uom_id, 1.0)) if uom_id else 1.0
+        quantity_of_bags = 1
+        weight_of_bags = round(random.uniform(_BAG_WEIGHT_MIN, _BAG_WEIGHT_MAX), 2)
+        total_weight_of_bags = round(quantity_of_bags * weight_of_bags * uom_conversion_kg, 6)
+        empty_bag_weight = min(total_weight_of_bags, round(it["accepted_qty"] * 0.05, 6))
+        empty_bag_weight = max(empty_bag_weight, 0.0)
+
+        item_id = it["item_ref_id"]
+        grn_qty = it["accepted_qty"]
+        param_rows = [{"quantity_deduction": 0, **p} for p in quality_details]
+        deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
             it["rate"], grn_qty, empty_bag_weight, deduction_percent, discount_rate,
@@ -2060,8 +2134,13 @@ class PurchaseChain:
             **overrides,
         )
 
-    @staticmethod
+    # Subclasses override _get_qc_items to swap QC line generation logic:
+    #   PurchaseChain / FullChain  → _qc_items_from_random (GP-flow: random bag/deduction)
+    #   POQCPBChain                → _qc_items_from        (CQP slab deduction)
+    _get_qc_items = staticmethod(_qc_items_from_random)
+
     def _build_qc_payload(
+        self,
         supplier_ref_id: int,
         po_id: int,
         gp_id: int,
@@ -2076,7 +2155,7 @@ class PurchaseChain:
         kg_to_uom_factors: Optional[dict] = None,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount, is_rate_weight_deduction=is_rate_weight_deduction, kg_to_uom_factors=kg_to_uom_factors)
+        qc_items = self._get_qc_items(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount, is_rate_weight_deduction=is_rate_weight_deduction, kg_to_uom_factors=kg_to_uom_factors)
         overrides = overrides or {}
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}
@@ -2453,7 +2532,7 @@ def dry_run_dump(supplier_ref_id: int, count: int, num_items: int, item_ref_id: 
         grn = PurchaseChain._build_grn_payload(
             supplier_ref_id, po_id="<PO_ID>", gp_id="<GP_ID>", items=items,
         )
-        qc = PurchaseChain._build_qc_payload(
+        qc = PurchaseChain(token="dry-run")._build_qc_payload(
             supplier_ref_id, po_id="<PO_ID>", gp_id="<GP_ID>", grn_id="<GRN_ID>", items=items,
         )
 
