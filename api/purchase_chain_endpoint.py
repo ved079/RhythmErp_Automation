@@ -42,7 +42,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         if use_po_qc_pb:
             from pages.private_b2b.scripts.chain_po_qc_pb import POQCPBChain as PurchaseChain
         else:
-            from pages.private_b2b.scripts.chain_full import FullChain as PurchaseChain
+            from pages.private_b2b.scripts.PurchaseChain_FULL_FLOW import FullChain as PurchaseChain
     except ImportError as e:
         yield _sse_event(LogEvent(
             type="error",
