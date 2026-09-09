@@ -184,7 +184,7 @@ def _compute_qc_line_fields(
     """
     total_amount = round(base_rate * grn_qty, 6)
     empty_bags_txn_amount = round(empty_bag_weight * base_rate, 6)
-    accepted_qty = grn_qty - empty_bag_weight
+    accepted_qty = round(grn_qty - empty_bag_weight, 3)
     qc_deduction_rate = round(base_rate * deduction_percent / 100.0, 6)
     deduction_weight = round(accepted_qty * deduction_percent / 100.0, 6)
 
@@ -466,7 +466,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         # stays consistent with the QC line computation.
         #   total_weight_of_bags = quantity_of_bags × weight_of_bags × uom_conversion_kg
         # → weight_of_bags = target_total / (quantity_of_bags × uom_conversion_kg)
-        target_total = round(it["accepted_qty"] * random.uniform(0.03, 0.05), 6)
+        target_total = round(it["accepted_qty"] * random.uniform(0.03, 0.05), 3)
         empty_bag_weight = max(target_total, 0.0)
         denom = quantity_of_bags * (uom_conversion_kg if uom_conversion_kg > 0 else 1.0)
         weight_of_bags = round(target_total / denom, 6)
@@ -476,7 +476,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         grn_qty = it["accepted_qty"]
         param_rows = _param_details(item_id, grn_qty)
         # deduction_percent = sum of per-param quantity_deductions (ERP-stored shape).
-        deduction_percent = round(sum(p.get("quantity_deduction", 0) for p in param_rows), 6)
+        deduction_percent = round(sum(p.get("quantity_deduction", 0) for p in param_rows), 3)
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
             it["rate"], grn_qty, empty_bag_weight, deduction_percent, discount_rate,
