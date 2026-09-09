@@ -417,7 +417,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
     )
     cqp_by_item = cqp_by_item or {}
 
-    def _param_details(item_id: int, grn_qty: float) -> List[dict]:
+    def _param_details(item_id: int) -> List[dict]:
         cqp = cqp_by_item.get(item_id)
         if cqp:
             # Group all slab rows by quality_type, sorted by min_quality_value.
@@ -440,7 +440,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
                 actual = round(slab1_max_q + 0.1, 2)
                 if slab2 and float(slab2.get("multiplier") or 0) > 0:
                     mult2 = float(slab2["multiplier"])
-                    quantity_deduction = round((actual - allowable) * mult2 * grn_qty, 3)
+                    quantity_deduction = round((actual - allowable) * mult2, 3)
                 else:
                     quantity_deduction = 0.0
                 result.append({
@@ -474,7 +474,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
 
         item_id = it["item_ref_id"]
         grn_qty = it["accepted_qty"]
-        param_rows = _param_details(item_id, grn_qty)
+        param_rows = _param_details(item_id)
         # deduction_percent = sum of per-param quantity_deductions (ERP-stored shape).
         deduction_percent = round(sum(p.get("quantity_deduction", 0) for p in param_rows), 3)
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
