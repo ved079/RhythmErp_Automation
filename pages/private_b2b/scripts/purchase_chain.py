@@ -1737,26 +1737,28 @@ class PurchaseChain:
                 pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
                 log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref}")
 
-                # Verify the PB survived async accounting and was posted.
-                # ERP rolls back the PB on accounting failure; even if the ID briefly
-                # exists, posting_status must be "Post" to confirm the entry is live.
-                # Poll up to ~20s (3+5+7+5), retry once after 12s cooldown if not posted.
+                # Verify the PB survived async accounting.
+                # A ghost PB has transaction_ref_no=None; a real one (Post or Unpost)
+                # always has a ref_no assigned by ERP accounting.  Poll up to ~20s
+                # (3+5+7+5), retry once after 12s cooldown if accounting failed.
                 _pb_confirmed = False
+                _txn_ref = None
                 for _attempt in range(2):
                     for _wait in (3, 5, 7, 5):
                         time.sleep(_wait)
                         _check = self.pb_api.get_pb(pb_id)
-                        _status = (_check or {}).get("posting_status", "")
-                        if _check and _check.get("id") and _status == "Post":
+                        _status = (_check or {}).get("posting_status")
+                        _txn_ref = (_check or {}).get("transaction_ref_no")
+                        if _check and _check.get("id") and _txn_ref:
                             _pb_confirmed = True
                             break
-                        if _check and _check.get("id") and _status:
-                            log.info(f"  PB {pb_id} exists but posting_status={_status!r} — waiting…")
+                        if _check and _check.get("id"):
+                            log.info(f"  PB {pb_id} exists but no ref_no yet (posting_status={_status!r}) — waiting…")
                     if _pb_confirmed:
                         break
                     if _attempt == 0:
                         log.warning(
-                            f"  PB {pb_id} not posted after accounting wait "
+                            f"  PB {pb_id} has no ref_no after accounting wait "
                             f"(posting_status={_status!r}) — ERP may have rolled it back. "
                             f"Waiting 12s and retrying PB creation…"
                         )
