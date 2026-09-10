@@ -290,6 +290,9 @@ _REQUIRED_VALUE_NAMES = {
     _VAL_ROUNDOFF_DR, _VAL_ROUNDOFF_CR,
 }
 
+# AT endpoint uses the AT record id (not the AD id)
+_AT_RECORD_ID = 1
+
 
 def validate_ad(existing_data: dict) -> list[str]:
     """
@@ -301,6 +304,143 @@ def validate_ad(existing_data: dict) -> list[str]:
     return sorted(_REQUIRED_VALUE_NAMES - present)
 
 
+# ── Accounting Template helpers ───────────────────────────────────────────────
+
+def _fetch_at(client: RhythmERPAPIClient) -> dict:
+    """Fetch the Accounting Template master record."""
+    r = client.session.get(
+        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_RECORD_ID}/",
+        timeout=15,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"AT fetch failed: HTTP {r.status_code}")
+    return r.json()
+
+
+def _put_at(client: RhythmERPAPIClient, at: dict) -> None:
+    """PUT the Accounting Template back (minimal body, no schemas needed)."""
+    body = {
+        "id": at["id"],
+        "create_version": False,
+        "accounting_template_name": at["accounting_template_name"],
+        "ledger_group_ref_id": at["ledger_group_ref_id"],
+        "attribute_name": at["attribute_name"],
+        "children": [
+            {
+                "stepper_name": child["stepper_name"],
+                "children": [],
+                "details": [
+                    {"accounting_definition_id": d["accounting_definition_id"], "id": d["id"]}
+                    for d in child.get("details", [])
+                ],
+            }
+            for child in at.get("children", [])
+        ],
+    }
+    r = client.session.put(
+        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_RECORD_ID}/",
+        json=body,
+        timeout=30,
+    )
+    if r.status_code not in (200, 201):
+        raise RuntimeError(f"AT PUT failed: HTTP {r.status_code} — {r.text[:200]}")
+
+
+def _at_child(at: dict) -> dict:
+    """Return the first (only) child stepper of the AT."""
+    children = at.get("children") or []
+    if not children:
+        raise RuntimeError("AT has no children — unexpected structure")
+    return children[0]
+
+
+def fix_ad_via_at_flow(
+    client: RhythmERPAPIClient,
+    canonical_payload: dict,
+    existing_id: int,
+    existing_details: list[dict],
+    missing_value_names: list[str],
+    dry_run: bool,
+) -> None:
+    """
+    Fix the PB AD by temporarily detaching it from the Accounting Template:
+      1. Fetch AT → remove PB row → PUT AT  (unlocks AD for new rows)
+      2. Build merged detail list: keep ALL existing rows + append missing canonical rows
+      3. PUT the AD
+      4. Fetch AT again → re-add PB row → PUT AT  (re-locks)
+    """
+    print(f"\n  Auto-fix via AT flow — missing value_names: {missing_value_names}")
+
+    # ── Step 1: fetch AT and detach PB ───────────────────────────────────────
+    at = _fetch_at(client)
+    child = _at_child(at)
+    all_details = child.get("details", [])
+
+    pb_rows = [d for d in all_details if d.get("accounting_definition_id") == existing_id]
+    without_pb = [d for d in all_details if d.get("accounting_definition_id") != existing_id]
+
+    if dry_run:
+        print(f"  [DRY RUN] Would remove PB row(s) {[d['id'] for d in pb_rows]} from AT")
+    else:
+        child["details"] = without_pb
+        _put_at(client, at)
+        print(f"  Detached PB (AD id={existing_id}) from AT")
+
+    # ── Step 2: build merged AD detail list ──────────────────────────────────
+    # Keep ALL existing rows (preserves tenant-specific entries like Labour/Transport).
+    # Append only canonical rows whose value_name is missing from existing.
+    existing_value_names = {str(d.get("value_name", "")) for d in existing_details}
+    canonical_details = canonical_payload.get("accounting_definition_detail", [])
+    new_rows = [
+        c for c in canonical_details
+        if str(c.get("value_name", "")) in missing_value_names
+        and str(c.get("value_name", "")) not in existing_value_names
+    ]
+
+    merged_details = list(existing_details) + new_rows
+
+    ad_body = {
+        "id": existing_id,
+        "name": canonical_payload["name"],
+        "transaction_type": canonical_payload["transaction_type"],
+        "accounting_definition_detail": merged_details,
+    }
+
+    if dry_run:
+        print(f"  [DRY RUN] Would PUT AD id={existing_id} with {len(merged_details)} entries "
+              f"(+{len(new_rows)} new)")
+        print(json.dumps(ad_body, indent=2))
+    else:
+        r = client.session.put(
+            f"{client.BASE_URL}/core/accounting-definition/{existing_id}/",
+            json=ad_body,
+            timeout=30,
+        )
+        if r.status_code not in (200, 201):
+            raise RuntimeError(f"AD PUT failed: HTTP {r.status_code} — {r.text[:200]}")
+        print(f"  AD id={existing_id} updated — added {len(new_rows)} row(s)")
+
+    # ── Step 3: re-attach PB to AT ────────────────────────────────────────────
+    # Re-fetch AT to get the latest state (new AT detail ids from re-created rows)
+    at2 = _fetch_at(client)
+    child2 = _at_child(at2)
+    current_details = child2.get("details", [])
+    already_attached = any(d.get("accounting_definition_id") == existing_id for d in current_details)
+
+    if not already_attached:
+        # Add PB row back — send without id so ERP creates a new AT detail row
+        current_details.append({"accounting_definition_id": existing_id})
+        child2["details"] = current_details
+
+        if dry_run:
+            print(f"  [DRY RUN] Would re-attach AD id={existing_id} to AT")
+        else:
+            _put_at(client, at2)
+            print(f"  Re-attached PB (AD id={existing_id}) to AT")
+    else:
+        print(f"  PB already attached to AT — skipping re-attach")
+
+
 def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None, dry_run: bool) -> None:
     import copy
 
@@ -310,13 +450,16 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
         if not missing:
             print(f"\n  AD id={existing_id} already has all required entries — no changes needed.")
             return
-        print(f"\n  AD id={existing_id} is missing value_names: {missing}")
-        print("  Cannot safely auto-fix via API (PUT would delete tenant-specific entries).")
-        print("  Fix manually in ERP UI: Accounting Definition → PB → add missing rows.")
-        raise RuntimeError(
-            f"AD id={existing_id} missing required value_names {missing}. "
-            "Fix via ERP UI: detach from Accounting Template, edit AD, re-attach."
+        # Auto-fix via AT detach → AD PUT → AT re-attach
+        fix_ad_via_at_flow(
+            client=client,
+            canonical_payload=copy.deepcopy(payload),
+            existing_id=existing_id,
+            existing_details=existing_data.get("accounting_definition_detail") or [],
+            missing_value_names=missing,
+            dry_run=dry_run,
         )
+        return
 
     # AD doesn't exist yet — create it
     send_payload = copy.deepcopy(payload)
