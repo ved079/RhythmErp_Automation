@@ -236,6 +236,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [gpCount, setGpCount] = useState(2)
   const [qcDiscount, setQcDiscount] = useState(false)
   const [isRateWeightDeduction, setIsRateWeightDeduction] = useState(false)
+  const [amountTier, setAmountTier] = useState<string>('random')
   const [loadingData, setLoadingData] = useState(false)
   const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean }[]>([])
   const [dataError, setDataError] = useState('')
@@ -474,8 +475,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       isRateWeightDeduction,
       false,
       flow === 'gp' ? supplierType : 'Supplier',
+      amountTier === 'random' ? null : amountTier,
     )
-  }, [count, supplier, numItems, itemIds, _erpToken, _erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction, supplierType])
+  }, [count, supplier, numItems, itemIds, _erpToken, _erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction, supplierType, amountTier])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -890,6 +892,42 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 : 'One gate pass for the whole PO'}
             </span>
           </div>
+          <div className="flex flex-col gap-0.5 items-center" data-tour="pc-amount-tier">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Total:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
+                {([
+                  { value: 'random', label: 'Random' },
+                  { value: 'lt5k',   label: '< ₹5K' },
+                  { value: '5k-15k', label: '₹5K–₹15K' },
+                  { value: 'gt15k',  label: '> ₹15K' },
+                ] as const).map((opt, i) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAmountTier(opt.value)}
+                    disabled={running}
+                    className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                      i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''
+                    } ${
+                      amountTier === opt.value
+                        ? 'bg-[#3F51B5] text-white'
+                        : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {amountTier === 'random' ? 'Random qty & rate' :
+               amountTier === 'lt5k' ? 'PO total ₹1K–₹5K' :
+               amountTier === '5k-15k' ? 'PO total ₹5K–₹15K' :
+               'PO total ₹15K–₹50K'}
+            </span>
+          </div>
+
           </>
           )}
         </div>

@@ -191,6 +191,8 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             if request.item_category_id:
                 kwargs["item_category_id"] = request.item_category_id
             kwargs["require_tax_rate"] = request.require_tax_rate
+            if request.amount_tier:
+                kwargs["amount_tier"] = request.amount_tier
             yield _sse_event(LogEvent(
                 type="log",
                 message=(
