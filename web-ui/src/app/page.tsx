@@ -148,6 +148,12 @@ export default function Home() {
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [justExpandedId, setJustExpandedId] = useState<string | null>(null)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      try { return new Set(JSON.parse(localStorage.getItem('sidebar-pinned-ids') || '[]')) } catch { return new Set() }
+    }
+    return new Set()
+  })
   const [activeTab, setActiveTab] = useState('test-runner')
   const [consoleOpen, setConsoleOpen] = useState(false)
   const [consoleCopied, setConsoleCopied] = useState(false)
@@ -513,14 +519,59 @@ export default function Home() {
     await refreshNotifications()
   }, [refreshNotifications])
 
+  const pinnedIdsRef = useRef(pinnedIds)
+  useEffect(() => { pinnedIdsRef.current = pinnedIds }, [pinnedIds])
+
+  // On mount, ensure all pinned parents start expanded
+  useEffect(() => {
+    if (pinnedIds.size > 0) {
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        pinnedIds.forEach(id => next.add(id))
+        return next
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const togglePin = useCallback((id: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+        // also collapse when unpinning
+        setExpandedIds((e) => { const ne = new Set(e); ne.delete(id); return ne })
+      } else {
+        next.add(id)
+        // ensure expanded when pinning
+        setExpandedIds((e) => { const ne = new Set(e); ne.add(id); return ne })
+      }
+      localStorage.setItem('sidebar-pinned-ids', JSON.stringify([...next]))
+      return next
+    })
+  }, [])
+
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) { next.delete(id); setJustExpandedId(null) }
-      else {
+      if (next.has(id)) {
+        next.delete(id)
+        setJustExpandedId(null)
+        // unpin on manual collapse
+        if (pinnedIdsRef.current.has(id)) {
+          setPinnedIds((prevPinned) => {
+            const np = new Set(prevPinned)
+            np.delete(id)
+            localStorage.setItem('sidebar-pinned-ids', JSON.stringify([...np]))
+            return np
+          })
+        }
+      } else {
+        const pinned = pinnedIdsRef.current
         const isTopLevel = ALL_SIDEBAR_MODULES.some(m => m.id === id)
-        if (isTopLevel) { ALL_SIDEBAR_MODULES.forEach(m => next.delete(m.id)) }
-        else {
+        if (isTopLevel) {
+          ALL_SIDEBAR_MODULES.forEach(m => { if (!pinned.has(m.id)) next.delete(m.id) })
+        } else {
           const findSiblings = (modules: SidebarModule[]): string[] => {
             for (const mod of modules) {
               if (mod.id === id) return []
@@ -532,7 +583,8 @@ export default function Home() {
             }
             return []
           }
-          const siblings = findSiblings(ALL_SIDEBAR_MODULES); siblings.forEach(s => next.delete(s))
+          const siblings = findSiblings(ALL_SIDEBAR_MODULES)
+          siblings.forEach(s => { if (!pinned.has(s)) next.delete(s) })
         }
         next.add(id); setJustExpandedId(id)
       }
@@ -945,7 +997,7 @@ export default function Home() {
           <aside className="flex flex-col h-full font-['Poppins'] bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#13151d] dark:via-[#13151d] dark:to-[#111318] shadow-[1px_0px_0px_#D4E3D9] dark:shadow-[1px_0px_0px_#1e2030]" style={{ width: sidebarWidth }}>
             <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
               <div className="py-2 px-2">
-                {sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} />))}
+                {sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} pinnedIds={pinnedIds} togglePin={togglePin} />))}
                 {(user.role === 'admin' || user.role === 'qa_lead' || (user.moduleAccess ?? []).includes('concurrency-testing')) && (
                 <button
                   onClick={() => { setActiveTab('concurrency'); setSelectedModule('dashboard') }}

@@ -1,7 +1,7 @@
 'use client'
 
-import React from 'react'
-import { ChevronDown, Circle } from 'lucide-react'
+import React, { useState } from 'react'
+import { ChevronDown, Circle, Pin, PinOff } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────
 interface SidebarModule {
@@ -32,6 +32,8 @@ export function SidebarModuleItem({
   toggleExpand,
   isLast = true,
   justExpandedId,
+  pinnedIds = new Set(),
+  togglePin,
 }: {
   module: SidebarModule
   depth?: number
@@ -41,18 +43,22 @@ export function SidebarModuleItem({
   toggleExpand: (id: string) => void
   isLast?: boolean
   justExpandedId: string | null
+  pinnedIds?: Set<string>
+  togglePin?: (id: string) => void
 }) {
+  const [hovered, setHovered] = useState(false)
   const hasChildren = module.children && module.children.length > 0
   const isExpanded = expandedIds.has(module.id)
   const isActive = activeId === module.id
   const isParentActive = activeId && hasChildren && module.children!.some((c) => c.id === activeId)
   const isChild = depth > 0
+  const isPinned = hasChildren && !isChild && pinnedIds.has(module.id)
 
   const treeLineWidth = '2px'
   const treeLineColor = 'color-mix(in srgb, currentColor 18%, transparent)'
 
   return (
-    <div className="relative">
+    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       {isChild && (
         <>
           <div
@@ -204,6 +210,25 @@ export function SidebarModuleItem({
             {module.badge}
           </span>
         )}
+        {hasChildren && !isChild && togglePin && (isPinned || hovered) && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); togglePin(module.id) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); togglePin(module.id) } }}
+            title={isPinned ? 'Unpin (stop always showing children)' : 'Pin (always show children)'}
+            className={`ml-1 shrink-0 p-0.5 rounded transition-all duration-150 ${
+              isPinned
+                ? 'text-[#1B6B3A] dark:text-green-400 opacity-100'
+                : 'text-gray-400 dark:text-gray-500 opacity-60 hover:opacity-100 hover:text-[#1B6B3A] dark:hover:text-green-400'
+            }`}
+          >
+            {isPinned
+              ? <PinOff size={13} strokeWidth={2} />
+              : <Pin size={13} strokeWidth={2} />
+            }
+          </span>
+        )}
       </button>
       {hasChildren && isExpanded && (
         <div className="relative">
@@ -229,6 +254,8 @@ export function SidebarModuleItem({
               toggleExpand={toggleExpand}
               isLast={idx === module.children!.length - 1}
               justExpandedId={justExpandedId}
+              pinnedIds={pinnedIds}
+              togglePin={togglePin}
             />
           ))}
         </div>
