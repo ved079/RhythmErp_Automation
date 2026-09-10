@@ -377,6 +377,7 @@ export async function startPurchaseChain(
   isRateWeightDeduction?: boolean,
   withJVCheck?: boolean,
   supplierRefType?: string,
+  amountTier?: string | null,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -401,6 +402,7 @@ export async function startPurchaseChain(
         is_rate_weight_deduction: isRateWeightDeduction ?? false,
         with_jv_check: withJVCheck ?? false,
         supplier_ref_type: supplierRefType ?? "Supplier",
+        amount_tier: amountTier ?? null,
       }),
     }));
 

@@ -120,10 +120,10 @@ def _supplier_name(sid: int) -> str:
 # Realistic pseudo-random ranges for auto-generated lines (single source of
 # truth for the generated quantities/rates; adjust ranges freely). These stay
 # dynamic — a fresh value is drawn per item per run, never baked per item.
-_QTY_MIN = 1
-_QTY_MAX = 2
+_QTY_MIN = 500
+_QTY_MAX = 2000
 _RATE_MIN = 500.0
-_RATE_MAX = 2000.0
+_RATE_MAX = 6000.0
 
 
 def _rand_qty() -> float:
@@ -132,6 +132,35 @@ def _rand_qty() -> float:
 
 def _rand_rate() -> float:
     return round(random.uniform(_RATE_MIN, _RATE_MAX), 2)
+
+
+# Amount tier bands: map tier key → (grand_total_min, grand_total_max) in INR.
+# The grand total is the PO amount (rate × qty, pre-deduction). PB will land
+# slightly below after bag/deduction/discount; we target PO, not PB exactly.
+_AMOUNT_TIERS: dict = {
+    "lt5k":   (1_000,  4_999),
+    "5k-15k": (5_000, 15_000),
+    "gt15k": (15_001, 50_000),
+}
+
+
+def _tier_qty_rate(tier: Optional[str], n_items: int = 1):
+    """Return (qty, rate) so that qty × rate ≈ grand_target / n_items for the tier.
+
+    Rate is picked randomly within the configured RATE range; qty is back-calculated
+    so the item target is hit. When tier is None or 'random', falls back to the
+    standard random generators.
+    """
+    if not tier or tier == "random":
+        return _rand_qty(), _rand_rate()
+    lo, hi = _AMOUNT_TIERS.get(tier, (None, None))
+    if lo is None:
+        return _rand_qty(), _rand_rate()
+    grand = random.uniform(lo, hi)
+    item_target = grand / max(n_items, 1)
+    rate = _rand_rate()
+    qty = max(1.0, round(item_target / rate, 2))
+    return qty, rate
 
 
 # Realistic ranges for QC "user inputs" (empty bag weight / deduction /
@@ -222,6 +251,7 @@ def _generate_chain_items(
     base_uom: int = 4,
     alternate_uom: int = 4,
     item_data: Optional[List[dict]] = None,
+    amount_tier: Optional[str] = None,
 ) -> List[dict]:
     """Build generic chain items (PO/GP/GRN/QC share this shape).
 
@@ -233,8 +263,7 @@ def _generate_chain_items(
     if item_data:
         items = []
         for i, data in enumerate(item_data):
-            qty = _rand_qty()
-            rate = _rand_rate()
+            qty, rate = _tier_qty_rate(amount_tier, n_items=len(item_data))
             items.append({
                 "item_ref_id": data["item_ref_id"],
                 "hsn_sac_no": data["hsn_sac_no"],
@@ -257,8 +286,7 @@ def _generate_chain_items(
     ids = item_ref_ids if item_ref_ids else [item_ref_id]
     items = []
     for i in range(num_items):
-        qty = _rand_qty()
-        rate = _rand_rate()
+        qty, rate = _tier_qty_rate(amount_tier, n_items=num_items)
         items.append({
             "item_ref_id": ids[i % len(ids)],
             "hsn_sac_no": hsn_sac_no,
@@ -1455,6 +1483,7 @@ class PurchaseChain:
         payment_method: int = PAYMENT_METHOD_CASH,
         payment_post: bool = True,
         supplier_ref_type: str = "Supplier",
+        amount_tier: Optional[str] = None,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -1608,7 +1637,7 @@ class PurchaseChain:
                 + (" and a CQP entry configured" if "QC" in docs else "")
                 + "."
             )
-        items = _generate_chain_items(num_items=len(item_data), item_data=item_data)
+        items = _generate_chain_items(num_items=len(item_data), item_data=item_data, amount_tier=amount_tier)
 
         # For farmer flow: override each item's rate with the CBR maximum rate
         if supplier_ref_type == "Farmer":

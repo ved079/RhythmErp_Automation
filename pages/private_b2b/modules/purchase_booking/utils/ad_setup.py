@@ -319,7 +319,7 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
     else:
         print(f"\n  ERROR: HTTP {r.status_code}")
         print(f"  {r.text[:500]}")
-        sys.exit(1)
+        raise RuntimeError(f"AD apply failed: HTTP {r.status_code} — {r.text[:200]}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
