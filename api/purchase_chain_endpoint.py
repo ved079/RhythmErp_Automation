@@ -95,7 +95,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         apply_ad(chain.client, payload, existing["id"] if existing else None, dry_run=False)
         yield _sse_event(LogEvent(
             type="log",
-            message=f"AD pre-flight done — {'updated' if existing else 'created'} canonical PB Accounting Definition",
+            message=f"AD pre-flight done — {'validated' if existing else 'created'} PB Accounting Definition",
             timestamp=datetime.now(timezone.utc),
         ))
     except Exception as ad_err:

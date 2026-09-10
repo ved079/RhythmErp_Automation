@@ -285,41 +285,56 @@ def _build_from_existing(canonical_details: list[dict], existing_details: list[d
     return result
 
 
+_REQUIRED_VALUE_NAMES = {
+    _VAL_PAYABLE, _VAL_PURCHASE, _VAL_IGST, _VAL_CGST, _VAL_SGST,
+    _VAL_ROUNDOFF_DR, _VAL_ROUNDOFF_CR,
+}
+
+
+def validate_ad(existing_data: dict) -> list[str]:
+    """
+    Check that all required value_names are present in the existing AD.
+    Returns a list of missing value_name strings (empty = all good).
+    """
+    details = existing_data.get("accounting_definition_detail") or []
+    present = {str(d.get("value_name", "")) for d in details}
+    return sorted(_REQUIRED_VALUE_NAMES - present)
+
+
 def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None, dry_run: bool) -> None:
     import copy
-    send_payload = copy.deepcopy(payload)
 
     if existing_id:
-        send_payload["id"] = existing_id
         existing_data = _fetch_existing_ad(client, existing_id)
-        existing_details = existing_data.get("accounting_definition_detail") or []
-        send_payload["accounting_definition_detail"] = _build_from_existing(
-            send_payload.get("accounting_definition_detail", []),
-            existing_details,
+        missing = validate_ad(existing_data)
+        if not missing:
+            print(f"\n  AD id={existing_id} already has all required entries — no changes needed.")
+            return
+        print(f"\n  AD id={existing_id} is missing value_names: {missing}")
+        print("  Cannot safely auto-fix via API (PUT would delete tenant-specific entries).")
+        print("  Fix manually in ERP UI: Accounting Definition → PB → add missing rows.")
+        raise RuntimeError(
+            f"AD id={existing_id} missing required value_names {missing}. "
+            "Fix via ERP UI: detach from Accounting Template, edit AD, re-attach."
         )
 
+    # AD doesn't exist yet — create it
+    send_payload = copy.deepcopy(payload)
+
     if dry_run:
-        action = f"PUT /core/accounting-definition/{existing_id}/" if existing_id else "POST /core/accounting-definition/"
-        print(f"\n[DRY RUN] Would {action}")
+        print(f"\n[DRY RUN] Would POST /core/accounting-definition/")
         print(json.dumps(send_payload, indent=2))
         return
 
-    if existing_id:
-        url = f"{client.BASE_URL}/core/accounting-definition/{existing_id}/"
-        r = client.session.put(url, json=send_payload, timeout=30)
-        verb = "Updated"
-    else:
-        url = f"{client.BASE_URL}/core/accounting-definition/"
-        r = client.session.post(url, json=send_payload, timeout=30)
-        verb = "Created"
-
+    url = f"{client.BASE_URL}/core/accounting-definition/"
+    r = client.session.post(url, json=send_payload, timeout=30)
     if r.status_code in (200, 201):
         result = r.json()
-        print(f"\n  {verb} AD id={result.get('id') or existing_id} '{payload['name']}'")
+        print(f"\n  Created AD id={result.get('id')} '{payload['name']}'")
     else:
         print(f"\n  ERROR: HTTP {r.status_code}")
         print(f"  {r.text[:500]}")
-        raise RuntimeError(f"AD apply failed: HTTP {r.status_code} — {r.text[:200]}")
+        raise RuntimeError(f"AD create failed: HTTP {r.status_code} — {r.text[:200]}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
