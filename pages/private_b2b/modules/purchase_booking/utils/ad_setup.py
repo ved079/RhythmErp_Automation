@@ -30,6 +30,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
+import string
 import sys
 
 PROJECT_ROOT = os.path.abspath(
@@ -452,12 +454,16 @@ def fix_ad_via_at_flow(
                 row["value_name"] = int(row["value_name"])
             except (TypeError, ValueError):
                 pass
-            row["parameter"] = ""
-            # Conditions: send without id so ERP creates them fresh
-            row["conditions"] = [
-                {k: v for k, v in cond.items() if k != "id"}
+            # Conditions for new rows: id="", plus a cond_id temp token the ERP requires
+            def _temp_id():
+                return "temp_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            new_conditions = [
+                {"id": "", "cond_id": _temp_id(), **{k: v for k, v in cond.items() if k != "id"}}
                 for cond in (c.get("conditions") or [])
             ]
+            row["conditions"] = new_conditions
+            # UI sends parameter="" for unconditional new rows, "" for conditional too
+            row["parameter"] = ""
             new_rows.append(row)
 
     def _normalize(row: dict) -> dict:
