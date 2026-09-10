@@ -125,13 +125,8 @@ def fetch_type_of_sale_ids(client: RhythmERPAPIClient) -> list[int]:
 
 # ── AD payload builder ────────────────────────────────────────────────────────
 
-def _param_block() -> dict:
-    return {
-        "parameter1": ["All"],
-        "parameter2": ["All"],
-        "parameter5": ["All"],
-        "parameter6": ["All"],
-    }
+def _param_block() -> list:
+    return []
 
 
 def _condition(param_id: int, operator: int, options: list, logical_op=None) -> dict:
@@ -309,7 +304,7 @@ def validate_ad(existing_data: dict) -> list[str]:
 def _fetch_at(client: RhythmERPAPIClient) -> dict:
     """Fetch the Accounting Template master record."""
     r = client.session.get(
-        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_RECORD_ID}/",
+        f"{client.BASE_URL}/core/dynamic-screen-wrapper/Accounting%20Template/{_AT_RECORD_ID}/",
         timeout=15,
     )
     if r.status_code != 200:
@@ -330,7 +325,7 @@ def _put_at(client: RhythmERPAPIClient, at: dict) -> None:
                 "stepper_name": child["stepper_name"],
                 "children": [],
                 "details": [
-                    {"accounting_definition_id": d["accounting_definition_id"], "id": d["id"]}
+                    {"accounting_definition_id": d["accounting_definition_id"], **( {"id": d["id"]} if "id" in d else {})}
                     for d in child.get("details", [])
                 ],
             }
@@ -358,7 +353,7 @@ def fix_ad_via_at_flow(
     client: RhythmERPAPIClient,
     canonical_payload: dict,
     existing_id: int,
-    existing_details: list[dict],
+    existing_data: dict,
     missing_value_names: list[str],
     dry_run: bool,
 ) -> None:
@@ -382,27 +377,47 @@ def fix_ad_via_at_flow(
     if dry_run:
         print(f"  [DRY RUN] Would remove PB row(s) {[d['id'] for d in pb_rows]} from AT")
     else:
-        child["details"] = without_pb
-        _put_at(client, at)
-        print(f"  Detached PB (AD id={existing_id}) from AT")
+        if pb_rows:
+            child["details"] = without_pb
+            _put_at(client, at)
+            print(f"  Detached PB (AD id={existing_id}) from AT")
+            import time as _time; _time.sleep(2)
+        else:
+            print(f"  PB already detached from AT (prior run may have done this)")
 
     # ── Step 2: build merged AD detail list ──────────────────────────────────
     # Keep ALL existing rows (preserves tenant-specific entries like Labour/Transport).
     # Append only canonical rows whose value_name is missing from existing.
+    existing_details = existing_data.get("accounting_definition_detail") or []
     existing_value_names = {str(d.get("value_name", "")) for d in existing_details}
     canonical_details = canonical_payload.get("accounting_definition_detail", [])
-    new_rows = [
-        c for c in canonical_details
-        if str(c.get("value_name", "")) in missing_value_names
-        and str(c.get("value_name", "")) not in existing_value_names
-    ]
+    new_rows = []
+    for c in canonical_details:
+        vn = str(c.get("value_name", ""))
+        if vn in missing_value_names and vn not in existing_value_names:
+            # UI sends new rows with id="" (empty string), value_name as int, parameter=""
+            row = dict(c)
+            row["id"] = ""
+            row["value_name"] = int(vn)
+            row["parameter"] = ""
+            new_rows.append(row)
 
-    merged_details = list(existing_details) + new_rows
+    # Existing rows: value_name must also be int (UI sends integers for all rows)
+    def _normalize(row: dict) -> dict:
+        r = dict(row)
+        try:
+            r["value_name"] = int(r["value_name"])
+        except (TypeError, ValueError):
+            pass
+        return r
 
+    merged_details = [_normalize(d) for d in existing_details] + new_rows
+
+    # Use the existing AD's own name; transaction_type as int (UI sends integer)
     ad_body = {
         "id": existing_id,
-        "name": canonical_payload["name"],
-        "transaction_type": canonical_payload["transaction_type"],
+        "name": existing_data.get("name", canonical_payload["name"]),
+        "transaction_type": int(existing_data.get("transaction_type", canonical_payload["transaction_type"])),
         "accounting_definition_detail": merged_details,
     }
 
@@ -413,11 +428,13 @@ def fix_ad_via_at_flow(
     else:
         r = client.session.put(
             f"{client.BASE_URL}/core/accounting-definition/{existing_id}/",
+            params={"screenName": "Accounting Definition"},
             json=ad_body,
             timeout=30,
         )
         if r.status_code not in (200, 201):
-            raise RuntimeError(f"AD PUT failed: HTTP {r.status_code} — {r.text[:200]}")
+            print(f"  AD PUT body: {json.dumps(ad_body, indent=2)}")
+            raise RuntimeError(f"AD PUT failed: HTTP {r.status_code} — {r.text[:400]}")
         print(f"  AD id={existing_id} updated — added {len(new_rows)} row(s)")
 
     # ── Step 3: re-attach PB to AT ────────────────────────────────────────────
@@ -455,7 +472,7 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
             client=client,
             canonical_payload=copy.deepcopy(payload),
             existing_id=existing_id,
-            existing_details=existing_data.get("accounting_definition_detail") or [],
+            existing_data=existing_data,
             missing_value_names=missing,
             dry_run=dry_run,
         )
