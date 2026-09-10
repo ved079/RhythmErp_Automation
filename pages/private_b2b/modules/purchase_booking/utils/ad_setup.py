@@ -65,13 +65,13 @@ _OP_AND    = 1710
 # Required CoA account names → looked up by exact name on each tenant
 # Value: (name_candidates, sub_ledger, description)
 _REQUIRED_ACCOUNTS: list[tuple[list[str], bool, str]] = [
-    (["Payable"],                             True,  "Creditors / AP"),
-    (["Purchase @gst"],                       False, "Purchase (taxable)"),
-    (["Purchase exempt"],                     False, "Purchase (exempt)"),
-    (["Input IGST"],                          False, "Input IGST"),
-    (["Input CGST"],                          False, "Input CGST"),
-    (["Input SGST"],                          False, "Input SGST"),
-    (["Expense Round Off", "Round Off"],      False, "Round-off"),
+    (["Payable", "Sundry Creditors", "Accounts Payable"],          True,  "Creditors / AP"),
+    (["Purchase @gst", "Purchase @GST", "Purchase @Gst"],          False, "Purchase (taxable)"),
+    (["Purchase exempt", "Purchase Exempt"],                        False, "Purchase (exempt)"),
+    (["Input IGST"],                                                False, "Input IGST"),
+    (["Input CGST"],                                                False, "Input CGST"),
+    (["Input SGST"],                                                False, "Input SGST"),
+    (["Expense Round Off", "Round Off", "Income Round Off", "Round off"], False, "Round-off"),
 ]
 
 
@@ -280,23 +280,50 @@ def _build_from_existing(canonical_details: list[dict], existing_details: list[d
     return result
 
 
-_REQUIRED_VALUE_NAMES = {
-    _VAL_PAYABLE, _VAL_PURCHASE, _VAL_IGST, _VAL_CGST, _VAL_SGST,
-    _VAL_ROUNDOFF_DR, _VAL_ROUNDOFF_CR,
-}
+# Universal PB AD fingerprints derived from comparing 3 live tenants (895/666/903).
+# Each fingerprint = (value_name_int, dr_cr, frozenset of param5 options).
+# param5 = supplier_ref_type field ("Supplier" / "Farmer" / empty for unconditional).
+# This catches both Purchase @gst AND Purchase exempt going missing independently,
+# unlike a flat value_name set which can't distinguish the two val=10 rows.
+_REQUIRED_FINGERPRINTS: frozenset = frozenset([
+    (9,  "Credit", frozenset()),               # Payable / Sundry Creditors
+    (10, "Debit",  frozenset(["Supplier"])),   # Purchase @gst  (taxable)
+    (10, "Debit",  frozenset(["Farmer"])),     # Purchase exempt
+    (11, "Debit",  frozenset()),               # Input IGST
+    (12, "Debit",  frozenset()),               # Input CGST
+    (13, "Debit",  frozenset()),               # Input SGST
+    (37, "Debit",  frozenset()),               # Round Off DR
+    (38, "Credit", frozenset()),               # Round Off CR
+])
 
 # AT screen name for dynamic-screen-wrapper endpoints
 _AT_SCREEN_NAME = "Accounting%20Template"
 
 
-def validate_ad(existing_data: dict) -> list[str]:
+def _row_fingerprint(d: dict) -> tuple:
+    """Return (value_name_int, dr_cr, frozenset(param5_options)) for one AD detail row."""
+    try:
+        vn = int(d.get("value_name", -1))
+    except (TypeError, ValueError):
+        vn = -1
+    dr_cr = d.get("dr_cr", "")
+    param5_options: frozenset = frozenset()
+    for cond in (d.get("conditions") or []):
+        if cond.get("parameter") == _PARAM_SUPPLIER_TYPE:
+            param5_options = frozenset(cond.get("options") or [])
+    return (vn, dr_cr, param5_options)
+
+
+def validate_ad(existing_data: dict) -> list[tuple]:
     """
-    Check that all required value_names are present in the existing AD.
-    Returns a list of missing value_name strings (empty = all good).
+    Check that all required (value_name, dr_cr, param5_options) fingerprints are
+    present in the existing AD.
+    Returns a list of missing fingerprint tuples (empty = all good).
     """
     details = existing_data.get("accounting_definition_detail") or []
-    present = {str(d.get("value_name", "")) for d in details}
-    return sorted(_REQUIRED_VALUE_NAMES - present)
+    present = {_row_fingerprint(d) for d in details}
+    missing = _REQUIRED_FINGERPRINTS - present
+    return sorted(missing, key=lambda f: (f[0], f[1]))
 
 
 # ── Accounting Template helpers ───────────────────────────────────────────────
@@ -371,7 +398,7 @@ def fix_ad_via_at_flow(
     canonical_payload: dict,
     existing_id: int,
     existing_data: dict,
-    missing_value_names: list[str],
+    missing_fingerprints: list[tuple],
     dry_run: bool,
 ) -> None:
     """
@@ -382,7 +409,8 @@ def fix_ad_via_at_flow(
       4. Re-fetch each AT → re-add PB row → PUT each AT  (re-locks)
     """
     import time as _time
-    print(f"\n  Auto-fix via AT flow — missing value_names: {missing_value_names}")
+    missing_desc = [(f[0], f[1], sorted(f[2])) for f in missing_fingerprints]
+    print(f"\n  Auto-fix via AT flow — missing entries: {missing_desc}")
 
     # ── Step 1: detach PB from ALL ATs ───────────────────────────────────────
     all_ats = _fetch_all_ats(client)
@@ -411,16 +439,25 @@ def fix_ad_via_at_flow(
 
     # ── Step 2: build merged AD detail list ──────────────────────────────────
     existing_details = existing_data.get("accounting_definition_detail") or []
-    existing_value_names = {str(d.get("value_name", "")) for d in existing_details}
+    existing_fingerprints = {_row_fingerprint(d) for d in existing_details}
     canonical_details = canonical_payload.get("accounting_definition_detail", [])
     new_rows = []
     for c in canonical_details:
-        vn = str(c.get("value_name", ""))
-        if vn in missing_value_names and vn not in existing_value_names:
+        fp = _row_fingerprint(c)
+        if fp in missing_fingerprints and fp not in existing_fingerprints:
+            # UI format: id="" (empty string), value_name as int, parameter=""
             row = dict(c)
             row["id"] = ""
-            row["value_name"] = int(vn)
+            try:
+                row["value_name"] = int(row["value_name"])
+            except (TypeError, ValueError):
+                pass
             row["parameter"] = ""
+            # Conditions: send without id so ERP creates them fresh
+            row["conditions"] = [
+                {k: v for k, v in cond.items() if k != "id"}
+                for cond in (c.get("conditions") or [])
+            ]
             new_rows.append(row)
 
     def _normalize(row: dict) -> dict:
@@ -502,7 +539,7 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
             canonical_payload=copy.deepcopy(payload),
             existing_id=existing_id,
             existing_data=existing_data,
-            missing_value_names=missing,
+            missing_fingerprints=missing,
             dry_run=dry_run,
         )
         return
@@ -543,7 +580,29 @@ def main():
     print(f"  AD Setup — tenant {args.tenant}")
     print(sep)
 
-    # ── Resolve accounts
+    # ── Find existing AD first (validate before touching CoA)
+    print("\nChecking existing Accounting Definition...")
+    existing = find_existing_pb_ad(client)
+    if existing:
+        print(f"  Found: id={existing['id']} name='{existing.get('name')}'")
+    else:
+        print("  Not found — will create new")
+
+    existing_id = existing["id"] if existing else None
+
+    # ── Validate fingerprints (no CoA needed for happy path)
+    if existing_id:
+        existing_data = _fetch_existing_ad(client, existing_id)
+        missing = validate_ad(existing_data)
+        if not missing:
+            print(f"\n  AD id={existing_id} already has all required entries — no changes needed.")
+            if not args.dry_run:
+                print(f"\n{sep}")
+                print("  Done. Run batch_create.py --dry-run to verify AD filter passes.")
+                print(sep)
+            return
+
+    # ── Only resolve CoA + build payload when a fix (or create) is needed
     print("\nResolving Chart of Accounts...")
     coa = fetch_coa(client)
     print(f"  {len(coa)} accounts found")
@@ -551,22 +610,10 @@ def main():
     for name, aid in accounts.items():
         print(f"    {name:30s} -> id={aid}")
 
-    # ── Type of Sale IDs
     print("\nResolving Type of Sale options (parameter6)...")
     tos_ids = fetch_type_of_sale_ids(client)
     print(f"  IDs: {tos_ids}")
 
-    # ── Find existing AD
-    print("\nChecking existing Accounting Definition...")
-    existing = find_existing_pb_ad(client)
-    if existing:
-        print(f"  Found: id={existing['id']} name='{existing.get('name')}' — will replace")
-    else:
-        print("  Not found — will create new")
-
-    existing_id = existing["id"] if existing else None
-
-    # ── Build payload
     payload = build_ad_payload(accounts, tos_ids)
 
     # ── Apply
