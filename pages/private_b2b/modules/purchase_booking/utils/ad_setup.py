@@ -285,8 +285,8 @@ _REQUIRED_VALUE_NAMES = {
     _VAL_ROUNDOFF_DR, _VAL_ROUNDOFF_CR,
 }
 
-# AT endpoint uses the AT record id (not the AD id)
-_AT_RECORD_ID = 1
+# AT screen name for dynamic-screen-wrapper endpoints
+_AT_SCREEN_NAME = "Accounting%20Template"
 
 
 def validate_ad(existing_data: dict) -> list[str]:
@@ -301,19 +301,33 @@ def validate_ad(existing_data: dict) -> list[str]:
 
 # ── Accounting Template helpers ───────────────────────────────────────────────
 
-def _fetch_at(client: RhythmERPAPIClient) -> dict:
-    """Fetch the Accounting Template master record."""
+def _fetch_all_ats(client: RhythmERPAPIClient) -> list[dict]:
+    """Return all Accounting Template records (full detail, all AT ids on tenant)."""
     r = client.session.get(
-        f"{client.BASE_URL}/core/dynamic-screen-wrapper/Accounting%20Template/{_AT_RECORD_ID}/",
+        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_SCREEN_NAME}/",
+        params={"page_number": 1, "page_size": 100},
         timeout=15,
     )
     if r.status_code != 200:
-        raise RuntimeError(f"AT fetch failed: HTTP {r.status_code}")
-    return r.json()
+        raise RuntimeError(f"AT listing failed: HTTP {r.status_code}")
+    listing = r.json()
+    rows = listing.get("screenmatlistingdata_set") or []
+    ats = []
+    for row in rows:
+        at_id = row.get("id")
+        if not at_id:
+            continue
+        r2 = client.session.get(
+            f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_SCREEN_NAME}/{at_id}/",
+            timeout=15,
+        )
+        if r2.status_code == 200:
+            ats.append(r2.json())
+    return ats
 
 
 def _put_at(client: RhythmERPAPIClient, at: dict) -> None:
-    """PUT the Accounting Template back (minimal body, no schemas needed)."""
+    """PUT an Accounting Template back (minimal body, no schemas needed)."""
     body = {
         "id": at["id"],
         "create_version": False,
@@ -325,7 +339,10 @@ def _put_at(client: RhythmERPAPIClient, at: dict) -> None:
                 "stepper_name": child["stepper_name"],
                 "children": [],
                 "details": [
-                    {"accounting_definition_id": d["accounting_definition_id"], **( {"id": d["id"]} if "id" in d else {})}
+                    {
+                        "accounting_definition_id": d["accounting_definition_id"],
+                        **( {"id": d["id"]} if "id" in d else {}),
+                    }
                     for d in child.get("details", [])
                 ],
             }
@@ -333,19 +350,19 @@ def _put_at(client: RhythmERPAPIClient, at: dict) -> None:
         ],
     }
     r = client.session.put(
-        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_RECORD_ID}/",
+        f"{client.BASE_URL}/core/dynamic-screen-wrapper/{at['id']}/",
         json=body,
         timeout=30,
     )
     if r.status_code not in (200, 201):
-        raise RuntimeError(f"AT PUT failed: HTTP {r.status_code} — {r.text[:200]}")
+        raise RuntimeError(f"AT PUT id={at['id']} failed: HTTP {r.status_code} — {r.text[:200]}")
 
 
 def _at_child(at: dict) -> dict:
-    """Return the first (only) child stepper of the AT."""
+    """Return the first (only) child stepper of an AT."""
     children = at.get("children") or []
     if not children:
-        raise RuntimeError("AT has no children — unexpected structure")
+        raise RuntimeError(f"AT id={at.get('id')} has no children — unexpected structure")
     return children[0]
 
 
@@ -358,36 +375,41 @@ def fix_ad_via_at_flow(
     dry_run: bool,
 ) -> None:
     """
-    Fix the PB AD by temporarily detaching it from the Accounting Template:
-      1. Fetch AT → remove PB row → PUT AT  (unlocks AD for new rows)
+    Fix the PB AD by temporarily detaching it from ALL Accounting Templates:
+      1. Fetch all ATs → remove PB row from each → PUT each AT  (unlocks AD)
       2. Build merged detail list: keep ALL existing rows + append missing canonical rows
       3. PUT the AD
-      4. Fetch AT again → re-add PB row → PUT AT  (re-locks)
+      4. Re-fetch each AT → re-add PB row → PUT each AT  (re-locks)
     """
+    import time as _time
     print(f"\n  Auto-fix via AT flow — missing value_names: {missing_value_names}")
 
-    # ── Step 1: fetch AT and detach PB ───────────────────────────────────────
-    at = _fetch_at(client)
-    child = _at_child(at)
-    all_details = child.get("details", [])
+    # ── Step 1: detach PB from ALL ATs ───────────────────────────────────────
+    all_ats = _fetch_all_ats(client)
+    ats_with_pb = []  # (at, child, pb_rows) tuples
 
-    pb_rows = [d for d in all_details if d.get("accounting_definition_id") == existing_id]
-    without_pb = [d for d in all_details if d.get("accounting_definition_id") != existing_id]
-
-    if dry_run:
-        print(f"  [DRY RUN] Would remove PB row(s) {[d['id'] for d in pb_rows]} from AT")
-    else:
+    for at in all_ats:
+        child = _at_child(at)
+        details = child.get("details", [])
+        pb_rows = [d for d in details if d.get("accounting_definition_id") == existing_id]
         if pb_rows:
-            child["details"] = without_pb
-            _put_at(client, at)
-            print(f"  Detached PB (AD id={existing_id}) from AT")
-            import time as _time; _time.sleep(2)
-        else:
-            print(f"  PB already detached from AT (prior run may have done this)")
+            ats_with_pb.append((at, child, pb_rows))
+
+    if not ats_with_pb:
+        print(f"  PB already detached from all ATs (prior run may have done this)")
+    else:
+        for at, child, pb_rows in ats_with_pb:
+            without_pb = [d for d in child.get("details", []) if d.get("accounting_definition_id") != existing_id]
+            if dry_run:
+                print(f"  [DRY RUN] Would remove PB from AT id={at['id']} \"{at['accounting_template_name']}\"")
+            else:
+                child["details"] = without_pb
+                _put_at(client, at)
+                print(f"  Detached PB from AT id={at['id']} \"{at['accounting_template_name']}\"")
+        if not dry_run:
+            _time.sleep(2)
 
     # ── Step 2: build merged AD detail list ──────────────────────────────────
-    # Keep ALL existing rows (preserves tenant-specific entries like Labour/Transport).
-    # Append only canonical rows whose value_name is missing from existing.
     existing_details = existing_data.get("accounting_definition_detail") or []
     existing_value_names = {str(d.get("value_name", "")) for d in existing_details}
     canonical_details = canonical_payload.get("accounting_definition_detail", [])
@@ -395,14 +417,12 @@ def fix_ad_via_at_flow(
     for c in canonical_details:
         vn = str(c.get("value_name", ""))
         if vn in missing_value_names and vn not in existing_value_names:
-            # UI sends new rows with id="" (empty string), value_name as int, parameter=""
             row = dict(c)
             row["id"] = ""
             row["value_name"] = int(vn)
             row["parameter"] = ""
             new_rows.append(row)
 
-    # Existing rows: value_name must also be int (UI sends integers for all rows)
     def _normalize(row: dict) -> dict:
         r = dict(row)
         try:
@@ -413,7 +433,6 @@ def fix_ad_via_at_flow(
 
     merged_details = [_normalize(d) for d in existing_details] + new_rows
 
-    # Use the existing AD's own name; transaction_type as int (UI sends integer)
     ad_body = {
         "id": existing_id,
         "name": existing_data.get("name", canonical_payload["name"]),
@@ -437,25 +456,35 @@ def fix_ad_via_at_flow(
             raise RuntimeError(f"AD PUT failed: HTTP {r.status_code} — {r.text[:400]}")
         print(f"  AD id={existing_id} updated — added {len(new_rows)} row(s)")
 
-    # ── Step 3: re-attach PB to AT ────────────────────────────────────────────
-    # Re-fetch AT to get the latest state (new AT detail ids from re-created rows)
-    at2 = _fetch_at(client)
-    child2 = _at_child(at2)
-    current_details = child2.get("details", [])
-    already_attached = any(d.get("accounting_definition_id") == existing_id for d in current_details)
+    # ── Step 3: re-attach PB to all ATs it was in ────────────────────────────
+    # Re-fetch each AT to get latest state, then add PB row back
+    at_ids_to_reattach = [at["id"] for at, _, _ in ats_with_pb] if ats_with_pb else []
+    if not at_ids_to_reattach:
+        # PB was already detached before we ran — try to re-attach to all ATs
+        at_ids_to_reattach = [at["id"] for at in all_ats]
 
-    if not already_attached:
-        # Add PB row back — send without id so ERP creates a new AT detail row
+    for at_id in at_ids_to_reattach:
+        r2 = client.session.get(
+            f"{client.BASE_URL}/core/dynamic-screen-wrapper/{_AT_SCREEN_NAME}/{at_id}/",
+            timeout=15,
+        )
+        if r2.status_code != 200:
+            print(f"  WARNING: could not re-fetch AT id={at_id}: HTTP {r2.status_code}")
+            continue
+        at2 = r2.json()
+        child2 = _at_child(at2)
+        current_details = child2.get("details", [])
+        already = any(d.get("accounting_definition_id") == existing_id for d in current_details)
+        if already:
+            print(f"  AT id={at_id}: PB already attached — skipping")
+            continue
         current_details.append({"accounting_definition_id": existing_id})
         child2["details"] = current_details
-
         if dry_run:
-            print(f"  [DRY RUN] Would re-attach AD id={existing_id} to AT")
+            print(f"  [DRY RUN] Would re-attach PB to AT id={at_id} \"{at2['accounting_template_name']}\"")
         else:
             _put_at(client, at2)
-            print(f"  Re-attached PB (AD id={existing_id}) to AT")
-    else:
-        print(f"  PB already attached to AT — skipping re-attach")
+            print(f"  Re-attached PB to AT id={at_id} \"{at2['accounting_template_name']}\"")
 
 
 def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None, dry_run: bool) -> None:
