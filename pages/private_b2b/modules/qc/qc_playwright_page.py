@@ -150,6 +150,9 @@ class QCPlaywrightPage(BasePlaywrightPage):
 
     def open_add_form(self):
         self.page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=15000)
+        # Hard refresh to clear any cached state before opening the form
+        self.page.keyboard.press("Control+Shift+R")
+        self.page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
         self.page.wait_for_timeout(500)
         add_btn = self.page.locator(self.ADD_BTN)
         add_btn.wait_for(state="visible", timeout=10000)
