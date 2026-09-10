@@ -85,19 +85,35 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
     try:
         from pages.private_b2b.modules.purchase_booking.utils.ad_setup import (
             fetch_coa, resolve_accounts, fetch_type_of_sale_ids,
-            find_existing_pb_ad, build_ad_payload, apply_ad,
+            find_existing_pb_ad, _fetch_existing_ad, validate_ad,
+            build_ad_payload, apply_ad,
         )
-        coa = fetch_coa(chain.client)
-        accounts = resolve_accounts(coa)
-        tos_ids = fetch_type_of_sale_ids(chain.client)
         existing = find_existing_pb_ad(chain.client)
-        payload = build_ad_payload(accounts, tos_ids)
-        apply_ad(chain.client, payload, existing["id"] if existing else None, dry_run=False)
-        yield _sse_event(LogEvent(
-            type="log",
-            message=f"AD pre-flight done — {'validated' if existing else 'created'} PB Accounting Definition",
-            timestamp=datetime.now(timezone.utc),
-        ))
+        existing_id = existing["id"] if existing else None
+
+        if existing_id:
+            existing_data = _fetch_existing_ad(chain.client, existing_id)
+            missing = validate_ad(existing_data)
+            if not missing:
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message="AD pre-flight done — all entries present, no changes needed",
+                    timestamp=datetime.now(timezone.utc),
+                ))
+                existing_id = None  # sentinel: skip apply_ad below
+
+        if existing_id is not None or not existing:
+            # AD missing entries (or doesn't exist) — resolve CoA and fix
+            coa = fetch_coa(chain.client)
+            accounts = resolve_accounts(coa)
+            tos_ids = fetch_type_of_sale_ids(chain.client)
+            payload = build_ad_payload(accounts, tos_ids)
+            apply_ad(chain.client, payload, existing["id"] if existing else None, dry_run=False)
+            yield _sse_event(LogEvent(
+                type="log",
+                message=f"AD pre-flight done — {'fixed' if existing else 'created'} PB Accounting Definition",
+                timestamp=datetime.now(timezone.utc),
+            ))
     except Exception as ad_err:
         yield _sse_event(LogEvent(
             type="log",
