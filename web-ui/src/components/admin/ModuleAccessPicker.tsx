@@ -314,6 +314,25 @@ export function ModuleAccessPicker({ open, onOpenChange, value, onChange, allMod
               </div>
             </div>
 
+            {/* Select All / Deselect All */}
+            {!isFullAccess && (
+              <div className="px-4 pb-2 shrink-0 sticky top-[52px] bg-white dark:bg-gray-950 z-10 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+                <span className="font-['Poppins'] text-[10px] text-gray-400">
+                  {selectedSet.size}/{allSelectableIds.length} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allSelected = allSelectableIds.every(id => selectedSet.has(id))
+                    setLocalValue(allSelected ? [] : allSelectableIds)
+                  }}
+                  className="font-['Poppins'] text-[10px] font-medium text-[#2E7D32] hover:underline cursor-pointer"
+                >
+                  {allSelectableIds.every(id => selectedSet.has(id)) ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+            )}
+
             {/* Tree */}
             {isFullAccess ? (
               <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -373,7 +392,7 @@ export function ModuleAccessPicker({ open, onOpenChange, value, onChange, allMod
                         const toggleTab = (tab: 'ui' | 'api' | 'batch') => {
                           const current = allowedTabs ?? ALL_TABS
                           const next = current.includes(tab) ? current.filter(t => t !== tab) : [...current, tab]
-                          setTabOverrides(prev => ({ ...prev, [mod.id]: next.length === 3 ? null : next.length === 0 ? ['ui'] : next }))
+                          setTabOverrides(prev => ({ ...prev, [mod.id]: next.length === 3 ? null : next }))
                         }
                         return (
                           <div key={mod.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 group border-b border-gray-300 dark:border-gray-600 last:border-b-0">
@@ -421,38 +440,48 @@ export function ModuleAccessPicker({ open, onOpenChange, value, onChange, allMod
             {/* Quick-set all tabs */}
             {!isFullAccess && selectedModulesList.length > 0 && (
               <div className="px-4 py-2.5 border-t border-gray-300 dark:border-gray-600 shrink-0 bg-gray-50/50 dark:bg-gray-900/30">
-                <div className="flex items-center gap-2">
-                  <span className="font-['Poppins'] text-[10px] text-gray-400 shrink-0">Set all:</span>
-                  {TAB_CONFIG.map(({ key, label, icon, color }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => {
-                        // Toggle: if all selected have this tab, remove from all; else add to all
-                        const allHave = selectedModulesList.every(m => {
-                          const t = tabOverrides[m.id] ?? null
-                          return !t || t.includes(key)
-                        })
-                        setTabOverrides(prev => {
-                          const next = { ...prev }
-                          selectedModulesList.forEach(m => {
-                            const current = next[m.id] ?? ALL_TABS
-                            const updated = allHave
-                              ? current.filter(t => t !== key)
-                              : [...new Set([...current, key])] as ('ui'|'api'|'batch')[]
-                            next[m.id] = updated.length === 3 ? null : updated.length === 0 ? ['ui'] : updated
-                          })
-                          return next
-                        })
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium font-['Poppins'] border transition-all cursor-pointer border-gray-200 dark:border-gray-500 text-gray-500 hover:text-white"
-                      style={{ '--hover-color': color } as React.CSSProperties}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = color; (e.currentTarget as HTMLButtonElement).style.borderColor = color; (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = ''; (e.currentTarget as HTMLButtonElement).style.borderColor = ''; (e.currentTarget as HTMLButtonElement).style.color = '' }}
-                    >
-                      {icon} {label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2.5">
+                  <span className="font-['Poppins'] text-[10px] font-medium text-gray-400 shrink-0">All modules:</span>
+                  <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden">
+                    {TAB_CONFIG.map(({ key, label, icon, color }, i) => {
+                      const allHave = selectedModulesList.every(m => { const t = tabOverrides[m.id] ?? null; return !t || t.includes(key) })
+                      const someHave = !allHave && selectedModulesList.some(m => { const t = tabOverrides[m.id] ?? null; return !t || t.includes(key) })
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          title={allHave ? `Remove ${label} from all` : someHave ? `Add ${label} to all (mixed)` : `Add ${label} to all`}
+                          onClick={() => {
+                            setTabOverrides(prev => {
+                              const next = { ...prev }
+                              selectedModulesList.forEach(m => {
+                                const current = next[m.id] ?? ALL_TABS
+                                const updated = allHave
+                                  ? current.filter(t => t !== key)
+                                  : [...new Set([...current, key])] as ('ui'|'api'|'batch')[]
+                                next[m.id] = updated.length === 3 ? null : updated
+                              })
+                              return next
+                            })
+                          }}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium font-['Poppins'] transition-all cursor-pointer ${i > 0 ? 'border-l border-gray-200 dark:border-gray-600' : ''}`}
+                          style={
+                            allHave
+                              ? { backgroundColor: color, color: 'white' }
+                              : someHave
+                                ? { backgroundColor: `${color}22`, color, borderColor: color }
+                                : { backgroundColor: 'transparent', color: '#9ca3af' }
+                          }
+                        >
+                          {icon}
+                          <span>{label}</span>
+                          {allHave && <Check className="size-2.5 ml-0.5" />}
+                          {someHave && <span className="ml-0.5 text-[8px] opacity-70">~</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="font-['Poppins'] text-[9px] text-gray-300 dark:text-gray-600 italic">click to toggle across all</span>
                 </div>
               </div>
             )}
