@@ -1040,6 +1040,8 @@ export default function Home() {
               handleSelectModule={handleSelectModule}
               handleRunModule={handleRunModule}
               loadDashboardStats={pd.loadDashboardStats}
+              userName={user?.name || 'Admin'}
+              userRole={user?.role || 'admin'}
             />
           ) : (
             <PersonalDashboardRenderer
