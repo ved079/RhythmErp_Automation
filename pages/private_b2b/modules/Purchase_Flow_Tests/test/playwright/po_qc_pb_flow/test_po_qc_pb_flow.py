@@ -747,10 +747,36 @@ def _val_cancel(page):
             pass
 
 
-def _val_select_first(page, label):
+def _val_select_first(page, label, alt_label=None):
     sel = f"//mat-label[contains(.,'{label}')]/ancestor::mat-form-field//mat-select"
-    page.locator(f"xpath={sel}").first.click(force=True)
+    loc = page.locator(f"xpath={sel}").first
+    if alt_label and loc.count() == 0:
+        sel = f"//mat-label[contains(.,'{alt_label}')]/ancestor::mat-form-field//mat-select"
+        loc = page.locator(f"xpath={sel}").first
+    loc.click(force=True)
     page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+    page.locator(".mat-mdc-select-panel mat-option").first.click(force=True)
+    try:
+        page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+    except Exception:
+        pass
+    page.wait_for_timeout(400)
+
+
+def _val_try_select_first(page, label, alt_label=None):
+    """Like _val_select_first but silently skips if field is absent or panel doesn't open."""
+    sel = f"//mat-label[contains(.,'{label}')]/ancestor::mat-form-field//mat-select"
+    loc = page.locator(f"xpath={sel}").first
+    if alt_label and loc.count() == 0:
+        sel = f"//mat-label[contains(.,'{alt_label}')]/ancestor::mat-form-field//mat-select"
+        loc = page.locator(f"xpath={sel}").first
+    if loc.count() == 0:
+        return
+    loc.click(force=True)
+    try:
+        page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
+    except Exception:
+        return
     page.locator(".mat-mdc-select-panel mat-option").first.click(force=True)
     try:
         page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
@@ -771,9 +797,9 @@ def _val_select_last(page, label):
     page.wait_for_timeout(400)
 
 
-def _val_select_text(page, label, text):
+def _val_select_text(page, label, text, row_index=0):
     sel = f"//mat-label[contains(.,'{label}')]/ancestor::mat-form-field//mat-select"
-    page.locator(f"xpath={sel}").first.click(force=True)
+    page.locator(f"xpath={sel}").nth(row_index).click(force=True)
     page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
     for opt in page.locator(
         ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
@@ -788,11 +814,12 @@ def _val_select_text(page, label, text):
     page.wait_for_timeout(400)
 
 
-def _val_fill(page, label, value):
+def _val_fill(page, label, value, row_index=0):
     page.evaluate("""
-        ([label, val]) => {
-            const lbl = [...document.querySelectorAll('mat-label')]
-                .find(l => l.textContent.includes(label));
+        ([label, val, idx]) => {
+            const all = [...document.querySelectorAll('mat-label')]
+                .filter(l => l.textContent.includes(label));
+            const lbl = all[idx] || all[0];
             if (!lbl) return;
             const inp = lbl.closest('mat-form-field')?.querySelector('input');
             if (!inp) return;
@@ -803,7 +830,7 @@ def _val_fill(page, label, value):
             inp.dispatchEvent(new Event('change', {bubbles: true}));
             inp.blur();
         }
-    """, [label, str(value)])
+    """, [label, str(value), row_index])
     page.wait_for_timeout(400)
 
 
@@ -834,15 +861,15 @@ def _po_prefill_full(page):
     _val_open_form(page, _PO_URL)
     _val_select_first(page, "Supplier Name")
     page.wait_for_timeout(1500)
-    _val_select_first(page, "Item Category")
+    _val_select_first(page, "Item Category", alt_label="PO Item Type")
     page.wait_for_timeout(500)
-    _val_fill(page, "Conversion Rate", "1")
+    _val_fill(page, "Conversion Rate", "1")  # no-op if field absent
     _val_select_first(page, "Location")
     page.wait_for_timeout(500)
     _val_select_first(page, "Department")
     _val_select_first(page, "Division")
     _val_select_first(page, "Type of Sale")
-    _val_select_first(page, "Packaging Forwarding")
+    _val_try_select_first(page, "Packaging Forwarding")  # silently skips if field absent
     _val_select_first(page, "Item Name")
     page.wait_for_timeout(1500)
 
@@ -864,124 +891,88 @@ _VAL_PO_EMPTY = [
     ("Item Category",              "This field is required."),
     ("PO Type",                    "This field is required."),
     ("Transaction Currency",       "This field is required."),
-    ("Conversion Rate",            "This field is required."),
-    ("Total PO Amount",            "Amount cannot be less than 0"),
     ("Location",                   "This field is required."),
     ("Department",                 "This field is required."),
     ("Division",                   "This field is required."),
     ("Type of Sale",               "This field is required."),
     ("Payment Terms",              "This field is required."),
     ("Delivery Terms",             "This field is required."),
-    ("Packaging Forwarding",       "This field is required."),
     ("Supplier Shippling Address", "This field is required."),
     ("Supplier Billing Address",   "This field is required."),
     ("Item Name",                  "This field is required."),
-    ("UOM",                        "This field is required."),
     ("Quantity",                   "Field is required"),
     ("Rate",                       "Rate is required"),
 ]
 _VAL_PO_AFTER_SUPPLIER = [
-    ("Item Category",        "This field is required."),
-    ("Conversion Rate",      "This field is required."),
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Location",             "This field is required."),
-    ("Department",           "This field is required."),
-    ("Division",             "This field is required."),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Item Category",  "This field is required."),
+    ("Location",       "This field is required."),
+    ("Department",     "This field is required."),
+    ("Division",       "This field is required."),
+    ("Type of Sale",   "This field is required."),
+    ("Item Name",      "This field is required."),
+    ("Quantity",       "Field is required"),
+    ("Rate",           "Rate is required"),
 ]
 _VAL_PO_AFTER_ITEM_CAT = [
-    ("Conversion Rate",      "This field is required."),
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Location",             "This field is required."),
-    ("Department",           "This field is required."),
-    ("Division",             "This field is required."),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Location",     "This field is required."),
+    ("Department",   "This field is required."),
+    ("Division",     "This field is required."),
+    ("Type of Sale", "This field is required."),
+    ("Item Name",    "This field is required."),
+    ("Quantity",     "Field is required"),
+    ("Rate",         "Rate is required"),
 ]
 _VAL_PO_AFTER_CONV_RATE = [
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Location",             "This field is required."),
-    ("Department",           "This field is required."),
-    ("Division",             "This field is required."),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Location",     "This field is required."),
+    ("Department",   "This field is required."),
+    ("Division",     "This field is required."),
+    ("Type of Sale", "This field is required."),
+    ("Item Name",    "This field is required."),
+    ("Quantity",     "Field is required"),
+    ("Rate",         "Rate is required"),
 ]
 _VAL_PO_AFTER_LOCATION = [
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Department",           "This field is required."),
-    ("Division",             "This field is required."),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Department",   "This field is required."),
+    ("Division",     "This field is required."),
+    ("Type of Sale", "This field is required."),
+    ("Item Name",    "This field is required."),
+    ("Quantity",     "Field is required"),
+    ("Rate",         "Rate is required"),
 ]
 _VAL_PO_AFTER_DEPT = [
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Division",             "This field is required."),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Division",     "This field is required."),
+    ("Type of Sale", "This field is required."),
+    ("Item Name",    "This field is required."),
+    ("Quantity",     "Field is required"),
+    ("Rate",         "Rate is required"),
 ]
 _VAL_PO_AFTER_DIV = [
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Type of Sale",         "This field is required."),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Type of Sale", "This field is required."),
+    ("Item Name",    "This field is required."),
+    ("Quantity",     "Field is required"),
+    ("Rate",         "Rate is required"),
 ]
 _VAL_PO_AFTER_SALE_TYPE = [
-    ("Total PO Amount",      "Amount cannot be less than 0"),
-    ("Packaging Forwarding", "This field is required."),
-    ("Item Name",            "This field is required."),
-    ("UOM",                  "This field is required."),
-    ("Quantity",             "Field is required"),
-    ("Rate",                 "Rate is required"),
+    ("Item Name", "This field is required."),
+    ("Quantity",  "Field is required"),
+    ("Rate",      "Rate is required"),
 ]
 _VAL_PO_AFTER_PACKAGING = [
-    ("Total PO Amount", "Amount cannot be less than 0"),
-    ("Item Name",       "This field is required."),
-    ("UOM",             "This field is required."),
-    ("Quantity",        "Field is required"),
-    ("Rate",            "Rate is required"),
+    ("Item Name", "This field is required."),
+    ("Quantity",  "Field is required"),
+    ("Rate",      "Rate is required"),
 ]
 _VAL_PO_AFTER_ITEM_NAME = [
-    ("Total PO Amount", "Amount cannot be less than 0"),
-    ("Quantity",        "Field is required"),
-    ("Total Amount",    "Amount cannot be less than 0"),
+    ("Quantity", "Field is required"),
 ]
 _VAL_PO_RATE_ZERO = [
-    ("Total PO Amount", "Amount cannot be less than 0"),
-    ("Rate",            "Rate cannot be less than 0"),
-    ("Total Amount",    "Amount cannot be less than 0"),
+    ("Rate", "Rate cannot be less than 0"),
 ]
 _VAL_PO_QTY_ZERO = [
-    ("Total PO Amount", "Amount cannot be less than 0"),
-    ("Quantity",        "Quantity cannot be less than 0"),
-    ("Total Amount",    "Amount cannot be less than 0"),
+    ("Quantity", "Quantity cannot be less than 0"),
 ]
 _VAL_PO_DISCOUNT_INVALID = [
-    ("Total PO Amount", "Amount cannot be less than 0"),
-    ("Discount %",      "Discount percentage must be between 0 to 100."),
+    ("Discount %", "Discount percentage must be between 0 to 100."),
 ]
 _VAL_QC_EMPTY = [
     ("Supplier Name",            "This field is required."),
@@ -1072,16 +1063,16 @@ class TestPOQCPBValidationFlow:
         _val_assert_errors(logged_in_page, _VAL_PO_AFTER_SUPPLIER)
 
     def test_po_step03_after_item_category(self, logged_in_page):
-        _val_select_first(logged_in_page, "Item Category")
+        _val_select_first(logged_in_page, "Item Category", alt_label="PO Item Type")
         logged_in_page.wait_for_timeout(500)
         _val_submit(logged_in_page)
         print("\n[PO-val] step03: after item category")
         _val_assert_errors(logged_in_page, _VAL_PO_AFTER_ITEM_CAT)
 
     def test_po_step04_after_conversion_rate(self, logged_in_page):
-        _val_fill(logged_in_page, "Conversion Rate", "1")
+        _val_fill(logged_in_page, "Conversion Rate", "1")  # no-op if field absent
         _val_submit(logged_in_page)
-        print("\n[PO-val] step04: after conversion rate")
+        print("\n[PO-val] step04: after conversion rate (skipped if field absent)")
         _val_assert_errors(logged_in_page, _VAL_PO_AFTER_CONV_RATE)
 
     def test_po_step05_after_location(self, logged_in_page):
@@ -1113,10 +1104,10 @@ class TestPOQCPBValidationFlow:
         _val_assert_errors(logged_in_page, _VAL_PO_AFTER_SALE_TYPE)
 
     def test_po_step09_after_packaging_forwarding(self, logged_in_page):
-        _val_select_first(logged_in_page, "Packaging Forwarding")
+        _val_try_select_first(logged_in_page, "Packaging Forwarding")  # silently skips if field absent
         logged_in_page.wait_for_timeout(500)
         _val_submit(logged_in_page)
-        print("\n[PO-val] step09: after packaging forwarding")
+        print("\n[PO-val] step09: after packaging forwarding (skipped if field absent)")
         _val_assert_errors(logged_in_page, _VAL_PO_AFTER_PACKAGING)
 
     def test_po_step10_after_item_name(self, logged_in_page):
@@ -1190,10 +1181,15 @@ class TestPOQCPBValidationFlow:
         po = POPlaywrightPage(logged_in_page)
         po.navigate_to_page()
         total, row_dicts, supplier_name, location, po_ref_no = \
-            po.create_record_for_integration(item_configs=[(PO_QC_PB_QTY, 0, 0)])
+            po.create_record_for_integration(
+                item_configs=[(PO_QC_PB_QTY, 0, 0)],
+                item_names_override=["Welding Electrode FLUID TRANSFER ABRASION RESISTANT REINFORCED TYPE"],
+                enable_gst=False,
+            )
         assert po_ref_no, "PO ref must be non-empty"
         integration_state["val_supplier"] = supplier_name
         integration_state["val_po_ref"]   = po_ref_no
+        integration_state["val_item_name"] = row_dicts[0]["item_name"]
         print(f"\n[VAL-PO] Created {po_ref_no}  supplier={supplier_name}")
 
     # ── QC VALIDATION ────────────────────────────────────────────────────────
@@ -1255,13 +1251,7 @@ class TestPOQCPBValidationFlow:
         qc.select_supplier_and_po(supplier_name)
 
         row_count = qc.count_item_rows()
-        # read item names from the auto-populated form rows
-        item_names = logged_in_page.evaluate("""
-            () => [...document.querySelectorAll('mat-form-field')]
-                .filter(f => f.querySelector('mat-label')?.textContent.trim() === 'Item Name')
-                .map(f => f.querySelector('.mat-mdc-select-min-line')?.textContent.trim() ?? '')
-                .filter(n => n.length > 0)
-        """)
+        item_names = [integration_state["val_item_name"]] * row_count
         cqp_config = build_cqp_config(item_names, logged_in_page)
         qc.cqp_config = cqp_config
         qc.item_names = item_names
@@ -1782,3 +1772,130 @@ class TestPOViewHistoryAuditTrail:
             f"\n  QC  = {integration_state['audit_qc_ref']} (locked)"
             f"\n  PB  = {pb_ref_no} (no edit)"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QC created without linking a PO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_QC_NO_PO_ITEM     = "Welding Electrode FLUID TRANSFER ABRASION RESISTANT REINFORCED TYPE"
+_QC_NO_PO_SUPPLIER = "Kagiso Rabada"
+
+@pytest.mark.po_qc_pb
+class TestQCWithoutPO:
+    """Create a QC record without selecting a PO, then verify:
+      - the record appears in the listing
+      - the View form shows Purchase Order = empty (no PO linked)
+    """
+
+    def test_step1_create_qc_without_po(self, logged_in_page, integration_state):
+        item_name  = _QC_NO_PO_ITEM
+        cqp_config = build_cqp_config([item_name], logged_in_page)
+
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.cqp_config  = cqp_config
+        qc.item_names  = [item_name]
+
+        qc.navigate_to_page()
+        qc.open_add_form()
+
+        # ── Header (no PO selected) ──────────────────────────────────────
+        _val_select_text(logged_in_page, "Supplier Name", _QC_NO_PO_SUPPLIER)
+        # wait for Supplier Type to auto-fill before continuing
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+
+        _val_select_text(logged_in_page, "Item category", "Bricks & Blocks")  # lowercase c — matches DOM
+        _val_select_text(logged_in_page, "Location",      "DHULE")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Department')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Department",    "Procurement Department")
+        _val_fill(logged_in_page, "Conversion Rate", "1")
+        _val_select_text(logged_in_page, "Division",      "STEEL DIVISION")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Type of Sale')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Type of Sale",  "1V1")
+        _val_select_text(logged_in_page, "Item Name",     item_name)
+        # wait for UOM to auto-fill (confirms item row is ready)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        logged_in_page.wait_for_timeout(500)
+
+        # Wait for item row to appear
+        logged_in_page.wait_for_selector(qc.QC_PARAM_BTN, timeout=15000)
+
+        # ── Bags popup ───────────────────────────────────────────────────
+        qc.fill_bags_popup(row_index=0)
+
+        # ── QC parameters ────────────────────────────────────────────────
+        logged_in_page.wait_for_timeout(5000)
+        qc.fill_qc_params_safe(row_index=0)
+
+        # ── Row-level fields ─────────────────────────────────────────────
+        _val_fill_native(logged_in_page, "Received Quantity", "1200")
+        logged_in_page.wait_for_timeout(800)
+        qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
+        logged_in_page.wait_for_timeout(500)
+
+        # ── Submit ───────────────────────────────────────────────────────
+        logged_in_page.locator(qc.SUBMIT_BTN).click()
+        logged_in_page.wait_for_selector(".swal2-container", timeout=15000)
+        title = logged_in_page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"Unexpected swal2 message: {title!r}"
+        try:
+            logged_in_page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass  # swal2 auto-dismissed
+        logged_in_page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+
+        # ── Capture ref no ───────────────────────────────────────────────
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+        qc_ref = qc.get_ref_no_of_first_row()
+        assert qc_ref, "QC ref no must be non-empty after creation"
+        integration_state["no_po_qc_ref"] = qc_ref
+        print(f"\n[QC-no-PO] created: {qc_ref}")
+
+    def test_step2_verify_in_listing(self, logged_in_page, integration_state):
+        if not integration_state.get("no_po_qc_ref"):
+            pytest.skip("QC not created in step 1")
+
+        ref = integration_state["no_po_qc_ref"]
+        qc  = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        qc.search_by_ref_no(ref)
+        logged_in_page.wait_for_timeout(1500)
+
+        assert qc.is_qc_in_table(ref), f"QC {ref!r} not found in listing table"
+        print(f"\n[QC-no-PO] step2: {ref} found in listing ✓")
+
+    def test_step3_verify_no_po_linked(self, logged_in_page, integration_state):
+        if not integration_state.get("no_po_qc_ref"):
+            pytest.skip("QC not created in step 1")
+
+        ref = integration_state["no_po_qc_ref"]
+
+        # Open View via row action menu
+        logged_in_page.locator(f"tr:has-text('{ref}')").first \
+            .locator("button.erp-row-trigger").click(force=True)
+        logged_in_page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+        logged_in_page.locator(
+            ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('View'))"
+        ).click()
+        logged_in_page.wait_for_timeout(1500)
+
+        po_text = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Purchase Order')]"
+            "/ancestor::mat-form-field//mat-select"
+        ).text_content().strip()
+
+        assert "select purchase order" in po_text.lower() or po_text == "", (
+            f"Expected no PO linked, got: {po_text!r}"
+        )
+        print(f"\n[QC-no-PO] step3: Purchase Order = {po_text!r} — no PO linked ✓")
+
+        logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)

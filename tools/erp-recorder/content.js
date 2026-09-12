@@ -208,6 +208,17 @@ window.__erpRecorderInjected = true;
     if (isDuplicateStep(step)) return;
     step.id = Date.now() + '-' + Math.random().toString(36).slice(2);
     step.patched = [];
+    step.ts = Date.now();
+    // Wait-guard: a mat-select selection fires async ERP calls. If the next
+    // recorded interaction happens ~2s later, that field may not be rendered
+    // yet — emit a wait_for_selector targeting it before replaying the step.
+    const prevStep = steps[steps.length - 1];
+    if (prevStep && prevStep.type === 'select' &&
+        Date.now() - (prevStep.ts || 0) < 2500 &&
+        ['select', 'input', 'button'].includes(step.type)) {
+      const wait = stepWaitCode(step);
+      if (wait) step.code = wait + '\n' + step.code;
+    }
     steps.push(step);
     // User actions anchor the "step-wise" grouping: readonly/error fields
     // surfaced afterwards are folded under the most recent action.
@@ -219,30 +230,65 @@ window.__erpRecorderInjected = true;
     scheduleReadonlyScan();
   }
 
+  // Locator-based wait for the field the next step is about to interact with.
+  // Falls back to a fixed pause for steps without a label-based field target.
+  function stepWaitCode(step) {
+    if (!step.label) return 'page.wait_for_timeout(1500)';
+    const lp = step.label.replace(/'/g, "\\'");
+    const nth = step.rowIndex != null ? `.nth(${step.rowIndex})` : '';
+    if (step.type === 'select') {
+      return `page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.wait_for(state="visible", timeout=10000)`;
+    }
+    if (step.type === 'input') {
+      return `page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.wait_for(state="visible", timeout=10000)`;
+    }
+    return 'page.wait_for_timeout(1500)';
+  }
+
   function persist() {
     try { chrome.storage.local.set({ erp_steps: steps, erp_recording: recording }); } catch (_) {}
   }
 
   // ── Readonly-field recording ─────────────────────────────────────────
+  // Occurrence index of a form-field among all fields sharing the same label.
+  // Grids render the same field once per row (Quality Parameter, Actual Value,
+  // Item Name…) — the index becomes the stable row number for `.nth(row_index)`.
+  function rowIndexOf(el) {
+    const ff = el && el.closest ? el.closest('mat-form-field') : null;
+    if (!ff || !ff.querySelector) return null;
+    const lbl = ff.querySelector('mat-label')?.textContent.trim();
+    if (!lbl) return null;
+    const all = [...document.querySelectorAll('mat-form-field')].filter(f =>
+      f.querySelector('mat-label')?.textContent.trim() === lbl
+    );
+    return all.length < 2 ? null : all.indexOf(ff);
+  }
+
   function readonlyAssertCode(ro) {
     const lp = ro.label.replace(/'/g, "\\'");
     const vq = ro.value.replace(/"/g, '\\"');
+    const nth = ro.rowIndex != null ? `.nth(${ro.rowIndex})` : '';
     return ro.isSelect
-      ? `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select").text_content().strip() == "${vq}"`
-      : `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input").input_value() == "${vq}"`;
+      ? `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
+      : `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`;
   }
 
   function recordReadonly(ro, grouped) {
     if (!ro || !ro.label || !ro.value) return;
-    const key = `${ro.label}:${ro.value}`;
+    const key = `${ro.label}:${ro.rowIndex ?? ''}:${ro.value}`;
     if (recordedReadonly.has(key)) return;
     recordedReadonly.add(key);
     // Auto-patched fields (surfaced by the post-step snapshot, not clicked by
     // the user) fold into the action that triggered them instead of cluttering
     // the step list. Direct clicks stay standalone ("Assert field" steps).
     if (grouped && lastAction &&
-        !lastAction.patched.some(p => p.label === ro.label && p.value === ro.value)) {
-      lastAction.patched.push({ label: ro.label, value: ro.value, isSelect: !!ro.isSelect });
+        !lastAction.patched.some(p => p.label === ro.label && p.rowIndex === ro.rowIndex && p.value === ro.value)) {
+      lastAction.patched.push({
+        label: ro.label,
+        value: ro.value,
+        isSelect: !!ro.isSelect,
+        rowIndex: ro.rowIndex ?? null,
+      });
       return;
     }
     addStep({ type: 'readonly', label: ro.label, value: ro.value, code: readonlyAssertCode(ro) });
@@ -402,7 +448,7 @@ window.__erpRecorderInjected = true;
             ?.textContent || matSel.getAttribute('aria-valuetext') || ''
         ).trim();
         if (lbl && selVal) {
-          return { label: lbl, value: selVal, isSelect: true };
+          return { label: lbl, value: selVal, isSelect: true, rowIndex: rowIndexOf(ff) };
         }
       }
     }
@@ -416,7 +462,7 @@ window.__erpRecorderInjected = true;
       const lbl = ff.querySelector('mat-label')?.textContent.trim();
       const val = (inp.value || inp.getAttribute('value') || '').trim();
       if (lbl && val) {
-        return { label: lbl, value: val, isSelect: false };
+        return { label: lbl, value: val, isSelect: false, rowIndex: rowIndexOf(ff) };
       }
     }
 
@@ -426,7 +472,7 @@ window.__erpRecorderInjected = true;
       const lbl = ff.querySelector('mat-label')?.textContent.trim();
       const selVal = nativeSel.selectedOptions?.[0]?.textContent?.trim() || nativeSel.value;
       if (lbl && selVal) {
-        return { label: lbl, value: selVal, isSelect: true };
+        return { label: lbl, value: selVal, isSelect: true, rowIndex: rowIndexOf(ff) };
       }
     }
 
@@ -487,15 +533,17 @@ window.__erpRecorderInjected = true;
     ) || opt.textContent.trim().replace(/\s+/g, ' ');
   }
 
-  function recordSelect(lbl, _alt, text, isFirst) {
+  function recordSelect(lbl, _alt, text, isFirst, el) {
     if (!lbl || !text) return;
     // Always emit the exact selected option text so the generated script
     // reflects the value the user actually chose. `_val_select_first` picks
     // whatever is first in the rendered panel, which is unfaithful when the
     // user picked a specific option, typed to filter, or the panel is
     // virtualized — so it is no longer used for real selections.
-    const code = `_val_select_text(page, "${lbl}", "${text.replace(/"/g, '\\"')}")`;
-    addStep({ type: 'select', label: lbl, value: text, isFirst, code });
+    const ri = rowIndexOf(el);
+    const suffix = ri != null ? `, row_index=${ri}` : '';
+    const code = `# label is case-sensitive — matches DOM text exactly\n_val_select_text(page, "${lbl}", "${text.replace(/"/g, '\\"')}"${suffix})`;
+    addStep({ type: 'select', label: lbl, value: text, isFirst, code, rowIndex: ri != null ? ri : null });
   }
 
   // Path A — option clicked/mousedown (capture). Consumes pendingSelect.
@@ -507,6 +555,7 @@ window.__erpRecorderInjected = true;
 
     const lbl = pendingSelect.label;
     const alt = pendingSelect.altLabel;
+    const el = pendingSelect.el;
     pendingSelect = null; // consumed — panel-close fallback won't double-record
 
     if (!recording) return;
@@ -516,7 +565,7 @@ window.__erpRecorderInjected = true;
       ? [...panel.querySelectorAll('mat-option:not(.dd-clear-option), mat-mdc-option:not(.dd-clear-option)')]
       : [];
     const isFirst = allOpts.length > 0 && allOpts[0] === opt;
-    recordSelect(lbl, alt, text, isFirst);
+    recordSelect(lbl, alt, text, isFirst, el);
   }
 
   // Path B — panel removed: compare mat-select value; record if changed.
@@ -528,9 +577,10 @@ window.__erpRecorderInjected = true;
     const lbl = pendingSelect.label;
     const alt = pendingSelect.altLabel;
     const text = cur;
+    const el = pendingSelect.el;
     pendingSelect = null;
     if (!recording) return;
-    recordSelect(lbl, alt, text, false);
+    recordSelect(lbl, alt, text, false, el);
   }
 
   // ── Document capture listeners ─────────────────────────────────────
@@ -776,20 +826,26 @@ window.__erpRecorderInjected = true;
     // Readonly/disabled input — record as readonly assertion
     if (inp.readOnly || inp.disabled) {
       const val = (inp.value || '').trim();
-      if (val) recordReadonly({ label: lbl, value: val, isSelect: false });
+      if (val) recordReadonly({ label: lbl, value: val, isSelect: false, rowIndex: rowIndexOf(ff) });
       return;
     }
 
-    // Normal editable input
+    // Normal editable input. Dedup key includes the row index so identical
+    // values filled into different grid rows (e.g. repeated Actual Value
+    // fills) are all recorded, not swallowed by the previous row's value.
+    const ri = rowIndexOf(ff);
+    const dedupKey = `${lbl}:${ri ?? ''}`;
     if (inp.value === '') return;
-    if (lastInputByLabel[lbl] === inp.value) return;
-    lastInputByLabel[lbl] = inp.value;
+    if (lastInputByLabel[dedupKey] === inp.value) return;
+    lastInputByLabel[dedupKey] = inp.value;
 
+    const riSuffix = ri != null ? `, row_index=${ri}` : '';
     addStep({
       type: 'input',
       label: lbl,
       value: inp.value,
-      code: `_val_fill(page, "${lbl}", "${inp.value.replace(/"/g, '\\"')}")`
+      code: `# label is case-sensitive — matches DOM text exactly\n_val_fill(page, "${lbl}", "${inp.value.replace(/"/g, '\\"')}"${riSuffix})`,
+      rowIndex: ri != null ? ri : null,
     });
   }, true);
 
