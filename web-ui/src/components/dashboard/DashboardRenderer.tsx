@@ -109,11 +109,11 @@ export function DashboardRenderer({
   const runTrendData  = runTrend.map((r) => r.passRate ?? 0)
 
   return (
-    <div data-tour="dashboard" className="flex-1 min-h-0 overflow-auto bg-gray-50/40 dark:bg-transparent">
+    <div data-tour="dashboard" className="flex-1 min-h-0 overflow-auto bg-gray-50/40 dark:bg-transparent [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
 
       {/* ── Header Banner — full bleed ───────────────── */}
       <div
-        className="relative w-full shrink-0 overflow-hidden"
+        className="relative w-full shrink-0 overflow-hidden sticky top-0 z-10"
         style={{
           backgroundImage: 'url(/Dashboard_Top_Image.png)',
           backgroundSize: 'cover',

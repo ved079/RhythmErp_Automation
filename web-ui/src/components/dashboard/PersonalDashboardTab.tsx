@@ -101,11 +101,11 @@ export function PersonalDashboardTab({
   }[userRole] ?? userRole
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-gray-50/40 dark:bg-transparent">
+    <div className="flex flex-col h-full overflow-auto bg-gray-50/40 dark:bg-transparent [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
 
       {/* ── Header Banner — full bleed ───────────────── */}
       <div
-        className="relative w-full shrink-0 overflow-hidden"
+        className="relative w-full shrink-0 overflow-hidden sticky top-0 z-10"
         style={{
           backgroundImage: 'url(/Dashboard_Top_Image.png)',
           backgroundSize: 'cover',
