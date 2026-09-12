@@ -39,7 +39,7 @@ function DocPill({ label, id }: { label: string; id?: string }) {
   const cls = DOC_COLORS[label] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
-      {label}{id && <span className="font-normal opacity-70">#{id}</span>}
+      {label}{id && <span className="font-normal opacity-70">{id.includes('/') ? ` ${id}` : `#${id}`}</span>}
     </span>
   )
 }
