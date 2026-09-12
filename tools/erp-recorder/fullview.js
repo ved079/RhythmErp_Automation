@@ -32,13 +32,22 @@ function generateCode(steps) {
                 : s.type === 'navigate' ? 'auto-patched after navigation'
                 : `auto-patched after "${s.label}"`;
       lines.push(`#  ${ctx}:`);
+      if (s.type === 'select') {
+        // selection fired an async autofill — wait on the first patched field
+        const p0 = s.patched[0];
+        const nth = p0.rowIndex != null ? `.nth(${p0.rowIndex})` : '';
+        const tgt = p0.isSelect ? 'mat-select' : 'input';
+        const lp0 = p0.label.replace(/'/g, "\\'");
+        lines.push(`page.locator("xpath=//mat-label[contains(.,'${lp0}')]/ancestor::mat-form-field//${tgt}")${nth}.wait_for(state="visible", timeout=10000)`);
+      }
       for (const p of s.patched) {
         const lp = p.label.replace(/'/g, "\\'");
         const vq = p.value.replace(/"/g, '\\"');
+        const nth = p.rowIndex != null ? `.nth(${p.rowIndex})` : '';
         lines.push(`#    ${p.label} = "${p.value}"`);
         lines.push(p.isSelect
-          ? `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select").text_content().strip() == "${vq}"`
-          : `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input").input_value() == "${vq}"`);
+          ? `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
+          : `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`);
       }
     }
   }
