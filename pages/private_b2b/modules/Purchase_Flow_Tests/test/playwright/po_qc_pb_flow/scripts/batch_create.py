@@ -376,7 +376,7 @@ def main():
                 parameter5=ch["po_params"]["param5"],
                 parameter6=ch["po_params"]["param6"],
             )
-            pb_data = pb_api.create_pb(pb_p)
+            pb_data, _ = pb_api.create_pb(pb_p)
             if not pb_data:
                 status = pb_api._last_status
                 err = (pb_api._last_response.text[:300] if pb_api._last_response else "no response")

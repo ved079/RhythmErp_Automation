@@ -270,7 +270,7 @@ def main():
     results = []
     for i, (payload, supplier, items) in enumerate(payloads):
         try:
-            data = api.create_pb(payload)
+            data, _ = api.create_pb(payload)
             if data:
                 entry_id   = data.get("id") or data.get("entry_id")
                 ref_no     = data.get("transaction_ref_no", str(entry_id))

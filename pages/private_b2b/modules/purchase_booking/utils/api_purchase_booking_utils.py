@@ -38,6 +38,7 @@ class PBAPIUtils:
 
         POSTs with request_method=SUBMIT. The 201 response body contains
         {"status": "Record Created Successfully", "id": <int>} directly.
+        Returns (data, submission_id) so the caller can stream events.
         """
         submission_id = str(uuid.uuid4())
         params = {**CREATE_PARAMS, "submission_id": submission_id}
@@ -48,9 +49,46 @@ class PBAPIUtils:
         self._last_response = resp
         self._last_status = resp.status_code
         if resp.status_code not in (200, 201):
-            return None
+            return None, submission_id
         # 201 body is {"status": "Record Created Successfully", "id": <int>}
-        return resp.json()
+        return resp.json(), submission_id
+
+    def stream_pb_events(self, submission_id: str, timeout: int = 40):
+        """Stream SSE events for a PB submission until terminal or timeout.
+
+        Yields parsed event dicts: {submission_id, sequence, step, status,
+        message, meta, is_terminal, timestamp}.
+
+        The endpoint hangs indefinitely for unknown submission_ids, so `timeout`
+        is enforced as a hard read timeout on the streaming connection.
+        Auth is Bearer token (same session headers — no separate cookie needed).
+        """
+        import json as _json
+        url = f"{self.client.BASE_URL}/notification/api/transactions/{submission_id}/events/"
+        try:
+            with self.client.session.get(
+                url,
+                headers={**self.client.session.headers, "Accept": "text/event-stream"},
+                stream=True,
+                timeout=timeout,
+            ) as resp:
+                if resp.status_code != 200:
+                    return
+                data_buf = ""
+                for line in resp.iter_lines(decode_unicode=True):
+                    if line.startswith("data:"):
+                        data_buf = line[5:].strip()
+                    elif line == "" and data_buf:
+                        try:
+                            event = _json.loads(data_buf)
+                            yield event
+                            if event.get("is_terminal"):
+                                return
+                        except _json.JSONDecodeError:
+                            pass
+                        data_buf = ""
+        except Exception:
+            return
 
     def get_pb(self, entry_id: int) -> Optional[dict]:
         url = build_get_url(self.client.BASE_URL, entry_id)

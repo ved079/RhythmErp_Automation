@@ -42,7 +42,7 @@ def _payload(items, **kwargs):
 
 
 def _create(pb_api, payload):
-    data = pb_api.create_pb(payload)
+    data, _ = pb_api.create_pb(payload)
     assert data is not None, (
         f"PB create failed: {pb_api.last_response().text[:400] if pb_api.last_response() else 'no response'}"
     )

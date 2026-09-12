@@ -311,7 +311,11 @@ def _row_fingerprint(d: dict) -> tuple:
     dr_cr = d.get("dr_cr", "")
     param5_options: frozenset = frozenset()
     for cond in (d.get("conditions") or []):
-        if cond.get("parameter") == _PARAM_SUPPLIER_TYPE:
+        try:
+            cond_param = int(cond.get("parameter", -1))
+        except (TypeError, ValueError):
+            cond_param = -1
+        if cond_param == _PARAM_SUPPLIER_TYPE:
             param5_options = frozenset(cond.get("options") or [])
     return (vn, dr_cr, param5_options)
 
@@ -319,13 +323,66 @@ def _row_fingerprint(d: dict) -> tuple:
 def validate_ad(existing_data: dict) -> list[tuple]:
     """
     Check that all required (value_name, dr_cr, param5_options) fingerprints are
-    present in the existing AD.
-    Returns a list of missing fingerprint tuples (empty = all good).
+    satisfied by the existing AD rows.
+
+    Match rule: a required fingerprint (vn, dr_cr, required_options) is satisfied
+    by any existing row where vn and dr_cr match AND required_options ⊆ row_options.
+    This means a combined row with options=["Farmer","Supplier"] covers BOTH the
+    Supplier-only AND Farmer-only required fingerprints.
+
+    Returns a list of unsatisfied fingerprint tuples (empty = all good).
     """
     details = existing_data.get("accounting_definition_detail") or []
-    present = {_row_fingerprint(d) for d in details}
-    missing = _REQUIRED_FINGERPRINTS - present
+    row_fps = [_row_fingerprint(d) for d in details]
+
+    missing = []
+    for req_vn, req_dr_cr, req_opts in _REQUIRED_FINGERPRINTS:
+        satisfied = any(
+            vn == req_vn and dr_cr == req_dr_cr and req_opts <= row_opts
+            for vn, dr_cr, row_opts in row_fps
+        )
+        if not satisfied:
+            missing.append((req_vn, req_dr_cr, req_opts))
+
     return sorted(missing, key=lambda f: (f[0], f[1]))
+
+
+def detect_duplicate_ad_rows(existing_data: dict) -> list[tuple]:
+    """
+    Return fingerprints that appear MORE than once in the AD detail rows.
+    A duplicate means two rows with identical (value_name, dr_cr, param5_options)
+    — e.g. two "Purchase @gst" Debit rows — which will cause debit≠credit in
+    accounting even though validate_ad reports everything present.
+    Returns list of (fingerprint, count) for any duplicated fingerprint.
+    """
+    from collections import Counter
+    details = existing_data.get("accounting_definition_detail") or []
+    counts = Counter(_row_fingerprint(d) for d in details)
+    return sorted(
+        [(fp, cnt) for fp, cnt in counts.items() if cnt > 1],
+        key=lambda x: (x[0][0], x[0][1]),
+    )
+
+
+def detect_rogue_ad_rows(existing_data: dict) -> list[dict]:
+    """
+    Return AD detail rows whose fingerprint doesn't match ANY canonical fingerprint
+    AND whose value_name overlaps with a canonical value_name.
+
+    The classic rogue row: a single "Purchase @gst" Debit entry with
+    options=["Farmer","Supplier"] — it fires for everyone, causing double-debit,
+    but its fingerprint (10, "Debit", frozenset(["Farmer","Supplier"])) doesn't
+    match any required fingerprint so validate_ad sees it as a harmless extra row
+    and still reports Purchase @gst (Supplier) as missing.
+    """
+    canonical_value_names = {fp[0] for fp in _REQUIRED_FINGERPRINTS}
+    details = existing_data.get("accounting_definition_detail") or []
+    rogue = []
+    for d in details:
+        fp = _row_fingerprint(d)
+        if fp not in _REQUIRED_FINGERPRINTS and fp[0] in canonical_value_names:
+            rogue.append(d)
+    return rogue
 
 
 # ── Accounting Template helpers ───────────────────────────────────────────────
@@ -535,6 +592,21 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
 
     if existing_id:
         existing_data = _fetch_existing_ad(client, existing_id)
+
+        # Check for duplicates — same fingerprint appearing more than once.
+        duplicates = detect_duplicate_ad_rows(existing_data)
+        if duplicates:
+            lines = []
+            for fp, cnt in duplicates:
+                vn, dr_cr, param5 = fp
+                cond_desc = f" (supplier_ref_type={sorted(param5)})" if param5 else " (unconditional)"
+                lines.append(f"    value_name={vn} {dr_cr}{cond_desc}: {cnt}x (expected 1)")
+            raise RuntimeError(
+                f"AD id={existing_id} has DUPLICATE rows — manual cleanup required in ERP:\n"
+                + "\n".join(lines)
+                + "\n\n  Fix: open Accounting Definition in ERP UI, delete the extra row(s), save."
+            )
+
         missing = validate_ad(existing_data)
         if not missing:
             print(f"\n  AD id={existing_id} already has all required entries — no changes needed.")
@@ -599,6 +671,18 @@ def main():
     # ── Validate fingerprints (no CoA needed for happy path)
     if existing_id:
         existing_data = _fetch_existing_ad(client, existing_id)
+
+        # Duplicate check — same fingerprint more than once.
+        duplicates = detect_duplicate_ad_rows(existing_data)
+        if duplicates:
+            print("\n  ERROR: Duplicate AD rows detected — manual cleanup required:")
+            for fp, cnt in duplicates:
+                vn, dr_cr, param5 = fp
+                cond_desc = f" (supplier_ref_type={sorted(param5)})" if param5 else " (unconditional)"
+                print(f"    value_name={vn} {dr_cr}{cond_desc}: appears {cnt}x (should be 1)")
+            print("\n  Open Accounting Definition in ERP UI, delete the extra row(s), then re-run.")
+            return
+
         missing = validate_ad(existing_data)
         if not missing:
             print(f"\n  AD id={existing_id} already has all required entries — no changes needed.")

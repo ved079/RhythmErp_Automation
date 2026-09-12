@@ -227,28 +227,44 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             pb = result.get("pb") or {}
             so = result.get("so") or {}
             parts = []
-            if po.get("id"): parts.append(f"PO {po['id']}")
+            def _ref(doc: dict) -> str:
+                return doc.get("ref") or str(doc.get("id", ""))
+
+            if po.get("id"): parts.append(f"PO {_ref(po)}")
             gps = result.get("gps") or ([gp] if gp else [])
             grns = result.get("grns") or ([grn] if grn else [])
             qcs = result.get("qcs") or ([qc] if qc else [])
             if len(gps) > 1:
-                parts.append(f"{len(gps)}×GP ({', '.join(str(g['id']) for g in gps)})")
-                parts.append(f"{len(grns)}×GRN ({', '.join(str(g['id']) for g in grns)})")
+                parts.append(f"{len(gps)}×GP ({', '.join(_ref(g) for g in gps)})")
+                parts.append(f"{len(grns)}×GRN ({', '.join(_ref(g) for g in grns)})")
                 if qcs:
-                    parts.append(f"{len(qcs)}×QC ({', '.join(str(q['id']) for q in qcs)})")
+                    parts.append(f"{len(qcs)}×QC ({', '.join(_ref(q) for q in qcs)})")
             else:
-                if gp.get("id"): parts.append(f"GP {gp['id']}")
-                if grn.get("id"): parts.append(f"GRN {grn['id']}")
-                if qc.get("id"): parts.append(f"QC {qc['id']}")
-            if pb.get("id"): parts.append(f"PB {pb['id']}")
-            if so.get("id"): parts.append(f"SO {so['id']}")
+                if gp.get("id"): parts.append(f"GP {_ref(gp)}")
+                if grn.get("id"): parts.append(f"GRN {_ref(grn)}")
+                if qc.get("id"): parts.append(f"QC {_ref(qc)}")
+            if pb.get("id"): parts.append(f"PB {_ref(pb)}")
+            if so.get("id"): parts.append(f"SO {_ref(so)}")
             payment = result.get("payment") or {}
-            if payment.get("id"): parts.append(f"PYMT {payment['id']}")
+            if payment.get("id"): parts.append(f"PYMT {_ref(payment)}")
             yield _sse_event(LogEvent(
                 type="log",
                 message=f"Chain [{i + 1}] OK — {' → '.join(parts)} ({elapsed:.1f}s)",
                 timestamp=datetime.now(timezone.utc),
             ))
+
+            # ── PB accounting events (buffered from SSE stream) ────────────
+            for _pb_entry in (result.get("pbs") or ([pb] if pb else [])):
+                for _ev in (_pb_entry.get("events") or []):
+                    _step = _ev.get("step", "")
+                    _status = _ev.get("status", "")
+                    _msg = _ev.get("message", "")
+                    _ev_type = "error" if _status == "FAILED" else "log"
+                    yield _sse_event(LogEvent(
+                        type=_ev_type,
+                        message=f"  PB accounting [{_step}] {_status}{': ' + _msg if _msg else ''}",
+                        timestamp=datetime.now(timezone.utc),
+                    ))
 
             # ── JV check (optional) ────────────────────────────────────────
             if request.with_jv_check and pb.get("ref") and result.get("ctx"):
