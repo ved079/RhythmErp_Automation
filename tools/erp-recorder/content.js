@@ -24,6 +24,13 @@ window.__erpRecorderInjected = true;
   let readonlyScanTimer = null;
   let readonlyScanning = false;
 
+  // Red-line validation error messages already recorded (mat-error / red-line)
+  const recordedErrors = new Set();
+
+  // Last user action (select/input/button/…) — post-step snapshots of
+  // auto-patched readonly fields are grouped under it ("step-wise" output)
+  let lastAction = null;
+
   function suppressInputsFor(ms) {
     inputCooldownUntil = Date.now() + ms;
   }
@@ -169,12 +176,23 @@ window.__erpRecorderInjected = true;
 
   function toggleRec() {
     recording = !recording;
+    if (recording && steps.length === 0) {
+      // First step of a fresh recording: remember where the replay starts.
+      suppressInputsFor(600);
+      addStep({
+        type: 'start',
+        label: location.href,
+        value: location.href,
+        code: `# started from\npage.goto("${location.href}")\npage.wait_for_selector("mat-form-field, table.mat-mdc-table, .page-content", timeout=20000)`
+      });
+    }
     setBarState(); persist();
     try { chrome.runtime.sendMessage({ type: 'STATE', recording, steps }); } catch (_) {}
   }
 
   function clearAll() {
     steps = []; pendingSelect = null;
+    recordedErrors.clear();
     recordedReadonly.clear();
     setBarState(); persist();
     try { chrome.runtime.sendMessage({ type: 'STATE', recording, steps }); } catch (_) {}
@@ -189,7 +207,13 @@ window.__erpRecorderInjected = true;
   function addStep(step) {
     if (isDuplicateStep(step)) return;
     step.id = Date.now() + '-' + Math.random().toString(36).slice(2);
+    step.patched = [];
     steps.push(step);
+    // User actions anchor the "step-wise" grouping: readonly/error fields
+    // surfaced afterwards are folded under the most recent action.
+    if (['select', 'input', 'button', 'swal2', 'navigate', 'start'].includes(step.type)) {
+      lastAction = step;
+    }
     setBarState(); persist();
     try { chrome.runtime.sendMessage({ type: 'STATE', recording, steps }); } catch (_) {}
     scheduleReadonlyScan();
@@ -208,11 +232,19 @@ window.__erpRecorderInjected = true;
       : `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input").input_value() == "${vq}"`;
   }
 
-  function recordReadonly(ro) {
+  function recordReadonly(ro, grouped) {
     if (!ro || !ro.label || !ro.value) return;
     const key = `${ro.label}:${ro.value}`;
     if (recordedReadonly.has(key)) return;
     recordedReadonly.add(key);
+    // Auto-patched fields (surfaced by the post-step snapshot, not clicked by
+    // the user) fold into the action that triggered them instead of cluttering
+    // the step list. Direct clicks stay standalone ("Assert field" steps).
+    if (grouped && lastAction &&
+        !lastAction.patched.some(p => p.label === ro.label && p.value === ro.value)) {
+      lastAction.patched.push({ label: ro.label, value: ro.value, isSelect: !!ro.isSelect });
+      return;
+    }
     addStep({ type: 'readonly', label: ro.label, value: ro.value, code: readonlyAssertCode(ro) });
   }
 
@@ -235,12 +267,89 @@ window.__erpRecorderInjected = true;
       for (const ff of ffs) {
         if (!ff.isConnected) continue;
         const ro = getReadonlyField(ff);
-        if (ro) recordReadonly(ro);
+        if (ro) recordReadonly(ro, true);
       }
     } finally {
       readonlyScanning = false;
     }
+    scanFormErrors();
   }
+
+  // ── Validation-error recording (red-line mat-error) ────────────────
+  // Mirrors the form-auditor approach: field-level invalid detection via
+  // the `mat-form-field-invalid` / `ng-invalid` classes, error text read
+  // from the field's `mat-error`. No visibility gate — if the field is
+  // marked invalid and carries error text, that IS what the user sees.
+  // Each error also records WHICH field/label (and grid row) showed it,
+  // and the assertion is scoped to that field instead of the whole page.
+  function fieldContext(field) {
+    const label = field.querySelector('mat-label')?.textContent.trim() || null;
+    let row = null;
+    const tr = field.closest('tr, [role="row"], .mat-mdc-row, .cdk-row');
+    if (tr && tr.parentElement) {
+      row = [...tr.parentElement.children].indexOf(tr) + 1; // 1-based
+    }
+    return { label, row };
+  }
+
+  function errorStepFor(field) {
+    const isInvalid =
+      field.classList.contains('mat-form-field-invalid') ||
+      field.classList.contains('ng-invalid');
+    if (!isInvalid) return null;
+    const errEl = field.querySelector('mat-error');
+    if (!errEl) return null;
+    let msg = (errEl.textContent || '').trim().replace(/\s+/g, ' ');
+    if (!msg || msg.length > 200) return null;
+
+    const { label, row } = fieldContext(field);
+    const where = label
+      ? row ? `"${label}" (row ${row})` : `"${label}"`
+      : row ? `row ${row}` : 'unknown field';
+    const msgEsc = msg.replace(/'/g, "\\'");
+    const labelEsc = label ? label.replace(/'/g, "\\'") : null;
+
+    let code;
+    if (label) {
+      code = `# Validation error — ${where}: "${msg}"\nassert page.locator("xpath=//mat-label[contains(.,'${labelEsc}')]/ancestor::mat-form-field//mat-error[contains(.,'${msgEsc}')]").first.is_visible()`;
+    } else {
+      code = `# Validation error — ${where}: "${msg}"\nassert page.locator("xpath=//mat-error[contains(.,'${msgEsc}')]").first.is_visible()`;
+    }
+
+    return { type: 'error', label: where, value: msg, code };
+  }
+
+  function scanFormErrors() {
+    if (!recording) return;
+    const ffs = document.querySelectorAll('mat-form-field, .mat-mdc-form-field');
+    for (const field of ffs) {
+      if (!field.isConnected) continue;
+      const step = errorStepFor(field);
+      if (!step) continue;
+      // Dedup per field+message (grid rows sharing a label each count, so
+      // we know exactly which row must be fixed)
+      const key = `${step.label}:${step.value}`;
+      if (recordedErrors.has(key)) continue;
+      recordedErrors.add(key);
+      addStep(step);
+    }
+  }
+
+  // Fire on class toggles too (mat-form-field-invalid, ng-invalid…), not
+  // just DOM insertion — validation state can change without the mat-error
+  // being re-inserted. Debounced so Angular finishes mutating first.
+  let errorScanTimer = null;
+  const errorMO = new MutationObserver(() => {
+    if (!recording) return;
+    clearTimeout(errorScanTimer);
+    errorScanTimer = setTimeout(scanFormErrors, 150);
+  });
+  errorMO.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class']
+  });
 
   // ── Helpers ───────────────────────────────────────────────────────────
   function inBar(el) { return bar.contains(el); }
@@ -378,16 +487,14 @@ window.__erpRecorderInjected = true;
     ) || opt.textContent.trim().replace(/\s+/g, ' ');
   }
 
-  function recordSelect(lbl, alt, text, isFirst) {
+  function recordSelect(lbl, _alt, text, isFirst) {
     if (!lbl || !text) return;
-    let code;
-    if (isFirst) {
-      code = alt
-        ? `_val_select_first(page, "${lbl}", alt_label="${alt}")`
-        : `_val_select_first(page, "${lbl}")`;
-    } else {
-      code = `_val_select_text(page, "${lbl}", "${text.replace(/"/g, '\\"')}")`;
-    }
+    // Always emit the exact selected option text so the generated script
+    // reflects the value the user actually chose. `_val_select_first` picks
+    // whatever is first in the rendered panel, which is unfaithful when the
+    // user picked a specific option, typed to filter, or the panel is
+    // virtualized — so it is no longer used for real selections.
+    const code = `_val_select_text(page, "${lbl}", "${text.replace(/"/g, '\\"')}")`;
     addStep({ type: 'select', label: lbl, value: text, isFirst, code });
   }
 
@@ -491,22 +598,85 @@ window.__erpRecorderInjected = true;
     if (btn.closest('#__erp_rec_bar')) return false;
     const cls = btn.className || '';
     if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true; // ERP flow buttons
+    if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true; // remove row
+    if (cls.includes('erp-row-trigger')) return true;                     // ⋮ row action menu
+    if (btn.querySelector('.erp-menu-title')) return true;                // View/Edit/History menu items
+    if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) return true; // search toggle
+    if (btn.closest('.erp-search-container')) return true;               // search submit button
     if (btn.closest('.popup-footer, .form-footer, mat-dialog-actions, mat-dialog-title')) return true;
     if (btn.closest('.cdk-overlay-container')) return false;             // stray overlay controls
     const t = (btn.textContent || '').trim();
     return t.length > 0 && t.length < 60 && FLOW_TEXT.test(t.toLowerCase());
   }
 
+  // Visible label of a button, ignoring decorative icon text (e.g. material "add")
+  function btnText(btn) {
+    const clone = btn.cloneNode(true);
+    clone.querySelectorAll('i').forEach(i => i.remove());
+    return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
   // Generate a locator for the clicked button, matching test-suite style
-  // (see po_playwright_page.py: button.erp-add-btn, .popup-footer XPaths…).
+  // (see po_playwright_page.py: button.erp-add-btn, .popup-footer XPaths,
+  // button.apply-button + .nth() for row removal).
   function buttonCode(btn) {
     const text = (btn.textContent || '').trim().replace(/\s+/g, ' ');
     const cls = btn.className || '';
     if (cls.includes('erp-add-btn')) {
-      return { label: 'Add button', code: 'page.locator("button.erp-add-btn").click()' };
+      // Keep the actual button caption so similar "Add …" buttons on other
+      // pages/sections are disambiguated (e.g. "Add Quality Control").
+      const addText = btnText(btn);
+      const safeText = addText.replace(/"/g, '\\"');
+      return {
+        label: addText || 'Add button',
+        code: addText
+          ? `page.locator("button.erp-add-btn", has_text="${safeText}").click()`
+          : 'page.locator("button.erp-add-btn").click()'
+      };
     }
     if (cls.includes('add-row-btn')) {
       return { label: 'Add row', code: 'page.locator("button.add-row-btn").click()' };
+    }
+    if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) {
+      // Row removal — index among all remove-row buttons (matches suite's .nth(row_index))
+      const idx = [...document.querySelectorAll('button.apply-button .fa-minus, button.apply-button i.fa-minus')]
+        .map(i => i.closest('button')).indexOf(btn);
+      return { label: 'Remove row', code: `page.locator("button.apply-button").nth(${idx}).click()` };
+    }
+    if (cls.includes('erp-row-trigger')) {
+      // ⋮ row action menu — prefer a ref-no scoped locator (suite's
+      // _open_row_action / tr:has-text) so replay targets the same record
+      // even if row order/index changes; fall back to .nth(row_index).
+      const row = btn.closest('tr');
+      const refCell = row && row.querySelector(
+        'td.cdk-column-transaction_ref_no, td.mat-column-transaction_ref_no'
+      );
+      const refNo = refCell ? refCell.textContent.replace(/\s+/g, ' ').trim() : '';
+      let code;
+      if (refNo && refNo.length >= 2) {
+        const safeRef = refNo.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        code = `page.locator("tr:has-text('${safeRef}')").first.locator("button.erp-row-trigger").click(force=True)\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
+      } else {
+        const idx = [...document.querySelectorAll('button.erp-row-trigger')].indexOf(btn);
+        code = `page.locator("button.erp-row-trigger").nth(${idx}).click()\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
+      }
+      return { label: 'Row menu', code };
+    }
+    if (btn.querySelector('.erp-menu-title')) {
+      // Edit / View / History / … from the action menu (suite: :has(.erp-menu-title:text-is('…')))
+      const title = btn.querySelector('.erp-menu-title').textContent.trim().replace(/'/g, "\\'");
+      return {
+        label: title,
+        code: `page.locator(".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('${title}'))").click()`
+      };
+    }
+    if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) {
+      // Toolbar search toggle — reveals the #erpSearchInput container
+      return { label: 'Search', code: 'page.locator("button[mattooltip=\'Search\']").click()' };
+    }
+    if (btn.closest('.erp-search-container')) {
+      // Search submit (attached magnifier in the search box) — filters the listing
+      return { label: 'Search', code: 'page.locator("button.search-btn.attached").click()' };
     }
     const footer = btn.closest('.popup-footer, .form-footer, mat-dialog-actions');
     if (footer) {
@@ -581,6 +751,22 @@ window.__erpRecorderInjected = true;
     const inp = e.target;
     if (inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') return;
     if (inp.type === 'checkbox' || inp.type === 'radio') return;
+
+    // Toolbar search box — not a mat-form-field. Keep comments + guarded open
+    // so replay works whether or not the toggle click was recorded separately.
+    if (inp.id === 'erpSearchInput') {
+      const v = inp.value.trim();
+      if (!v) return;
+      if (lastInputByLabel['Search'] === v) return;
+      lastInputByLabel['Search'] = v;
+      addStep({
+        type: 'search',
+        label: 'Search',
+        value: v,
+        code: `# Search: "${v}"\nif not page.locator("input#erpSearchInput").is_visible():\n    page.locator("button[mattooltip='Search']").click()\npage.locator("input#erpSearchInput").fill("${v.replace(/"/g, '\\"')}")\npage.locator("input#erpSearchInput").press("Enter")`
+      });
+      return;
+    }
 
     const ff = inp.closest('mat-form-field');
     if (!ff) return;
@@ -680,16 +866,19 @@ window.__erpRecorderInjected = true;
 
   // ── URL change ────────────────────────────────────────────────────
   function onUrlChange() {
+    const prev = lastUrl;
+    lastUrl = location.href;      // always stay in sync (start/first nav included)
     if (!recording) return;
-    if (location.href === lastUrl) return;
-    lastUrl = location.href;
+    if (location.href === prev) return;
     suppressInputsFor(800);
     pendingSelect = null;
+    recordedErrors.clear();
     recordedReadonly.clear(); // new page → readonly values must be re-asserted
     addStep({
       type: 'navigate',
-      label: location.pathname,
-      code: `page.goto("${location.href}")\npage.wait_for_selector("table.mat-mdc-table, .page-content, mat-form-field", timeout=20000)`
+      label: location.href,
+      value: location.href,
+      code: `# Route changed: ${location.href}\npage.goto("${location.href}")\npage.wait_for_selector("table.mat-mdc-table, .page-content, mat-form-field", timeout=20000)`
     });
   }
   window.addEventListener('hashchange', onUrlChange);
@@ -699,7 +888,16 @@ window.__erpRecorderInjected = true;
     const _origReplace = history.replaceState.bind(history);
     history.pushState    = function (...a) { _origPush(...a);    setTimeout(onUrlChange, 0); };
     history.replaceState = function (...a) { _origReplace(...a); setTimeout(onUrlChange, 0); };
-  } catch (_) { /* Zone.js may have made these non-writable — hashchange covers hash routing */ }
+  } catch (_) { /* Zone.js may have made these non-writable - the poller below still catches roaming */ }
+
+  // Safety net: some SPA navigations (Zone.js rewrites of history, hash
+  // mutations that don't emit hashchange…) never reach the listeners above.
+  // Poll the URL during recording so roaming to another page is always kept.
+  if (!window.__erp_rec_url_poller) {
+    window.__erp_rec_url_poller = setInterval(() => {
+      if (location.href !== lastUrl) onUrlChange();
+    }, 500);
+  }
 
   // ── Message handler ───────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
@@ -711,6 +909,7 @@ window.__erpRecorderInjected = true;
       toggleRec(); reply({ steps, recording });
     } else if (msg.type === 'RESTART') {
       steps = []; pendingSelect = null;
+      recordedErrors.clear();
       recordedReadonly.clear();
       recording = true;
       setBarState(); persist();

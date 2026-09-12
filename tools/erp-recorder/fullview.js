@@ -11,6 +11,8 @@ const TYPE_META = {
   row:           { label: 'ROW',      color: '#79c0ff' },
   tracking:      { label: 'TRACK',    color: '#ffa657' },
   readonly:      { label: 'READ',     color: '#a5b4fc' },
+  start:         { label: 'START',    color: '#56d364' },
+  search:        { label: 'SEARCH',   color: '#79c0ff' },
 };
 
 function generateCode(steps) {
@@ -25,6 +27,20 @@ function generateCode(steps) {
     else if (s.type === 'dialog-close')  lines.push(`# ── Dialog closed ──`);
     else if (s.type === 'tracking')  lines.push(`# ── PB tracking card ──`);
     lines.push(s.code);
+    if (s.patched && s.patched.length) {
+      const ctx = s.type === 'start'    ? 'page loaded, fields matching initial state'
+                : s.type === 'navigate' ? 'auto-patched after navigation'
+                : `auto-patched after "${s.label}"`;
+      lines.push(`#  ${ctx}:`);
+      for (const p of s.patched) {
+        const lp = p.label.replace(/'/g, "\\'");
+        const vq = p.value.replace(/"/g, '\\"');
+        lines.push(`#    ${p.label} = "${p.value}"`);
+        lines.push(p.isSelect
+          ? `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select").text_content().strip() == "${vq}"`
+          : `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input").input_value() == "${vq}"`);
+      }
+    }
   }
   return lines.join('\n');
 }
