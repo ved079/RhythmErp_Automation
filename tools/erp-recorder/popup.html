@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ERP Recorder</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --surf:      #161b22;
+    --surf2:     #21262d;
+    --border:    #30363d;
+    --text:      #c9d1d9;
+    --muted:     #484f58;
+    --accent:    #388bfd;
+    --rec:       #f85149;
+    --green:     #3fb950;
+    --mono: 'Cascadia Code','Consolas','Monaco','Courier New',monospace;
+  }
+
+  body {
+    width: 420px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 9px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surf);
+  }
+  .header-left { display: flex; align-items: center; gap: 8px; }
+  .logo { font-size: 12px; font-weight: 500; letter-spacing: .04em; color: var(--text); }
+  .logo span { color: var(--muted); }
+
+  #rec-dot {
+    font-size: 14px; color: var(--muted); line-height: 1;
+    transition: color .2s;
+  }
+  #rec-dot.on {
+    color: var(--rec);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  #rec-label {
+    font-size: 9px; letter-spacing: .12em; color: var(--muted);
+    min-width: 64px;
+  }
+  #rec-label.on { color: var(--rec); }
+
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  #step-count { font-size: 10px; color: var(--muted); }
+
+  /* ── Buttons ── */
+  .btn {
+    background: var(--surf2); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 11px; border-radius: 5px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .05em;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: #2d333b; }
+  .btn.stop { border-color: var(--rec); color: var(--rec); background: #1a0e0e; }
+  .btn.stop:hover { background: #220f0f; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); background: var(--surf2); }
+  .btn.copied { border-color: var(--green); color: var(--green); background: #0d1e0e; }
+
+  /* ── Steps panel ── */
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 14px 6px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted); font-size: 9px; letter-spacing: .1em;
+  }
+
+  #step-list {
+    max-height: 200px; overflow-y: auto;
+    border-bottom: 1px solid var(--border);
+  }
+  #step-list::-webkit-scrollbar { width: 4px; }
+  #step-list::-webkit-scrollbar-track { background: var(--bg); }
+  #step-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .step-row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 5px 14px;
+    border-bottom: 1px solid #1c2028;
+  }
+  .step-row:last-child { border-bottom: none; }
+  .step-row:hover { background: var(--surf); }
+
+  .step-badge {
+    flex-shrink: 0;
+    font-size: 8px; letter-spacing: .08em;
+    padding: 1px 5px; border-radius: 3px;
+    border: 1px solid;
+    min-width: 56px; text-align: center;
+    font-weight: 500;
+  }
+
+  .step-label {
+    flex: 1; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px;
+  }
+
+  .step-val {
+    flex-shrink: 0; color: var(--muted); font-size: 10px;
+    max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .empty {
+    padding: 20px 14px; color: var(--muted); font-size: 10px; line-height: 1.7;
+    text-align: center;
+  }
+
+  /* ── Code panel ── */
+  .code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 14px 6px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted); font-size: 9px; letter-spacing: .1em;
+  }
+
+  #code-out {
+    display: block;
+    background: var(--bg); color: #adbac7;
+    font-family: var(--mono); font-size: 10px; line-height: 1.65;
+    padding: 12px 14px; max-height: 220px; overflow: auto;
+    white-space: pre; tab-size: 4;
+    border: none; outline: none; resize: none; width: 100%;
+    border-bottom: 1px solid var(--border);
+  }
+  #code-out::-webkit-scrollbar { width: 4px; height: 4px; }
+  #code-out::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Code syntax tint (simple manual coloring via class wrapping won't work in <pre>,
+     but the monochrome style still reads well) */
+
+  /* ── Footer ── */
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    background: var(--surf);
+  }
+  .footer-hint { color: var(--muted); font-size: 9px; letter-spacing:.04em; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span id="rec-dot">●</span>
+    <span id="rec-label">IDLE</span>
+    <span class="logo">ERP <span>Playwright</span> Recorder</span>
+  </div>
+  <div class="header-right">
+    <span id="step-count">0 steps</span>
+    <button class="btn" id="btn-toggle">Start</button>
+  </div>
+</div>
+
+<div class="panel-header">
+  <span>STEPS <span style="color:#21262d">— newest first</span></span>
+  <button class="btn ghost" id="btn-clear" style="font-size:9px;padding:2px 7px;">Clear</button>
+</div>
+
+<div id="step-list">
+  <div class="empty">No steps yet. Start recording and interact with the ERP.</div>
+</div>
+
+<div class="code-header">
+  <span>GENERATED CODE</span>
+  <button class="btn" id="btn-copy" style="font-size:9px;padding:3px 9px;">Copy</button>
+</div>
+
+<pre id="code-out"># No steps recorded yet.</pre>
+
+<div class="footer">
+  <span class="footer-hint">mat-select · input · button · dialog · swal2 · table row</span>
+  <button class="btn" id="btn-restart" style="font-size:9px;padding:3px 9px;border-color:#388bfd;color:#388bfd;background:#0d1624;">↺ Restart</button>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

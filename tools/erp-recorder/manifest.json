@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ERP Playwright Recorder",
+  "version": "1.2.0",
+  "description": "Record Angular Material ERP interactions → generate Playwright Python code",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ERP Recorder"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["fullview.html", "fullview.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

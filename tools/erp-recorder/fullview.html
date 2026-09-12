@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ERP Recorder — Full View</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:     #0d1117;
+    --surf:   #161b22;
+    --surf2:  #21262d;
+    --border: #30363d;
+    --text:   #c9d1d9;
+    --muted:  #484f58;
+    --accent: #388bfd;
+    --rec:    #f85149;
+    --green:  #3fb950;
+    --mono: 'Cascadia Code','Consolas','Monaco','Courier New',monospace;
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surf); flex-shrink: 0; gap: 12px;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .logo { font-size: 13px; font-weight: 600; letter-spacing: .03em; }
+  .logo em { color: var(--muted); font-style: normal; font-weight: 400; }
+  #dot { font-size: 14px; color: var(--muted); transition: color .2s; }
+  #dot.on { color: var(--rec); animation: pulse .9s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+  @keyframes glow  { 0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)} 50%{box-shadow:0 0 8px 3px rgba(248,81,73,.4)} }
+  #rec-lbl { font-size: 9px; letter-spacing: .12em; color: var(--muted); }
+  #rec-lbl.on { color: var(--rec); }
+  #step-count { font-size: 10px; color: var(--muted); padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .btn {
+    background: var(--surf2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 13px; border-radius: 5px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .05em;
+    cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: #2d333b; }
+  .btn.stop  { border-color: var(--rec); color: var(--rec); background: #1a0e0e; animation: glow 1.8s ease-in-out infinite; }
+  .btn.copy  { border-color: var(--accent); color: var(--accent); background: #0d1624; }
+  .btn.copy:hover { background: #111e30; }
+  .btn.copied { border-color: var(--green); color: var(--green); background: #0d1e0e; }
+  .btn.restart { border-color: #7c3aed; color: #c4b5fd; background: #130e1f; }
+  .btn.restart:hover { background: #1a1028; }
+
+  /* ── Layout: two-pane ── */
+  .panes {
+    display: grid; grid-template-columns: 340px 1fr;
+    flex: 1; overflow: hidden;
+  }
+
+  /* ── Steps pane ── */
+  .steps-pane {
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .pane-header {
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+    font-size: 9px; letter-spacing: .1em; color: var(--muted);
+    background: var(--surf); flex-shrink: 0;
+  }
+  #step-list {
+    flex: 1; overflow-y: auto; padding: 6px 0;
+  }
+  #step-list::-webkit-scrollbar { width: 4px; }
+  #step-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .step-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 16px; cursor: default;
+    border-bottom: 1px solid #161b22;
+    transition: background .1s;
+  }
+  .step-row:hover { background: var(--surf); }
+  .step-num { color: var(--muted); font-size: 9px; min-width: 20px; padding-top: 2px; text-align: right; flex-shrink: 0; }
+  .step-badge {
+    flex-shrink: 0; font-size: 8px; letter-spacing: .08em;
+    padding: 2px 6px; border-radius: 3px; border: 1px solid;
+    min-width: 60px; text-align: center; font-weight: 500; margin-top: 1px;
+  }
+  .step-body { flex: 1; min-width: 0; }
+  .step-label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+  .step-val { color: var(--muted); font-size: 10px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step-code { color: #484f58; font-size: 9px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Code pane ── */
+  .code-pane { display: flex; flex-direction: column; overflow: hidden; }
+  #code-out {
+    flex: 1; overflow: auto; padding: 16px 20px;
+    background: var(--bg); color: #adbac7;
+    font-family: var(--mono); font-size: 11px; line-height: 1.75;
+    white-space: pre; tab-size: 4; border: none; outline: none; resize: none; width: 100%;
+  }
+  #code-out::-webkit-scrollbar { width: 6px; }
+  #code-out::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Empty state ── */
+  .empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--muted); gap: 8px; font-size: 11px; text-align: center; padding: 32px;
+  }
+  .empty-dot { font-size: 32px; color: var(--border); }
+
+  /* ── Live badge ── */
+  #live-badge {
+    font-size: 8px; letter-spacing: .1em; padding: 2px 7px;
+    border-radius: 10px; border: 1px solid #3fb95044; background: #3fb95011; color: #3fb950;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span id="dot">●</span>
+    <span id="rec-lbl">IDLE</span>
+    <span class="logo">ERP <em>Playwright</em> Recorder</span>
+    <span id="live-badge">LIVE</span>
+    <span id="step-count">0 steps</span>
+  </div>
+  <div class="topbar-right">
+    <button class="btn restart" id="btn-restart">↺ Restart</button>
+    <button class="btn" id="btn-clear">Clear</button>
+    <button class="btn copy" id="btn-copy">Copy Code</button>
+    <button class="btn" id="btn-toggle">Start</button>
+  </div>
+</div>
+
+<div class="panes">
+  <div class="steps-pane">
+    <div class="pane-header">STEPS — chronological</div>
+    <div id="step-list">
+      <div class="empty">
+        <span class="empty-dot">⏺</span>
+        <span>No steps yet.<br>Start recording and interact with the ERP.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-pane">
+    <div class="pane-header">GENERATED CODE</div>
+    <textarea id="code-out" readonly spellcheck="false"># No steps recorded yet.</textarea>
+  </div>
+</div>
+
+<script src="fullview.js"></script>
+</body>
+</html>
