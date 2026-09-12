@@ -27,7 +27,6 @@ import time
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-TOKEN  = ""   # paste JWT token here
 TENANT = "871"
 N      = 3    # number of parallel PB submissions
 
@@ -110,9 +109,13 @@ def build_pb_payload(po_id: int, grn_id: int, qc_id: int) -> dict:
 
 
 def run():
-    if not TOKEN:
-        print("ERROR: paste your JWT token into the TOKEN variable at the top of this file.")
+    import getpass
+    token = getpass.getpass("Paste your ERP JWT token: ").strip()
+    if not token:
+        print("ERROR: token cannot be empty.")
         sys.exit(1)
+
+    tenant = input(f"Tenant ID [{TENANT}]: ").strip() or TENANT
 
     from common.erp_api_client import RhythmERPAPIClient
     from pages.private_b2b.scripts.purchase_chain import PurchaseChain
@@ -120,7 +123,7 @@ def run():
 
     # Step 1 — build chain up to QC
     print("Step 1: running PO → GP → GRN → QC chain to get document IDs...")
-    chain = PurchaseChain(token=TOKEN, tenant=TENANT, delay=0)
+    chain = PurchaseChain(token=token, tenant=tenant, delay=0)
     result = chain.run(documents=["PO", "GP", "GRN", "QC"])
     po_id  = (result.get("po") or {}).get("id")
     grn_id = (result.get("grn") or {}).get("id")
@@ -136,7 +139,7 @@ def run():
     def fire_pb(idx: int):
         try:
             client = RhythmERPAPIClient()
-            client.login_from_browser(token=TOKEN, tenant_id=TENANT)
+            client.login_from_browser(token=token, tenant_id=tenant)
             api = PBAPIUtils(client)
             data, sub_id = api.create_pb(copy.deepcopy(payload))
             events = []
