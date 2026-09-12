@@ -22,6 +22,8 @@ interface DashboardRendererProps {
   handleSelectModule: (id: string) => void
   handleRunModule?: (moduleId: string) => void
   loadDashboardStats: () => Promise<void>
+  userName?: string
+  userRole?: string
 }
 
 const STATUS_BUG: Record<string, string> = {
@@ -58,7 +60,15 @@ export function DashboardRenderer({
   handleSelectModule,
   handleRunModule,
   loadDashboardStats,
+  userName = 'Admin',
+  userRole = 'admin',
 }: DashboardRendererProps) {
+  const roleLabel = {
+    admin: 'Administrator',
+    qa_lead: 'QA Lead',
+    tester: 'Tester',
+    viewer: 'Viewer',
+  }[userRole] ?? userRole
   const stats = dashboardStats as Record<string, any> | null
   const totalTests      = (stats?.totalTests      as number) ?? 0
   const totalPassed     = (stats?.totalPassed     as number) ?? 0
@@ -100,19 +110,43 @@ export function DashboardRenderer({
 
   return (
     <div data-tour="dashboard" className="flex-1 min-h-0 overflow-auto bg-gray-50/40 dark:bg-transparent">
-      <div className="p-5 space-y-5 max-w-6xl w-full mx-auto">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      {/* ── Header Banner — full bleed ───────────────── */}
+      <div
+        className="relative w-full shrink-0 overflow-hidden"
+        style={{
+          backgroundImage: 'url(/Dashboard_Top_Image.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center bottom',
+          minHeight: '148px',
+        }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(to right, rgba(255,255,255,0.85) 36%, rgba(255,255,255,0.08) 68%, transparent 100%)' }}
+        />
+        <div className="relative z-10 flex items-center justify-between px-7 py-6">
           <div>
-            <h2 className="text-[17px] font-semibold text-gray-800 dark:text-gray-100 tracking-tight">Dashboard</h2>
-            <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-0.5">RhythmERP test automation overview</p>
+            <p className="text-[13px] font-medium text-[#4a7c59] tracking-wide">
+              {(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,' })()}
+            </p>
+            <h2 className="text-[26px] font-bold text-[#1B4332] leading-tight mt-0.5">{userName}</h2>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#1B4332]/10 text-[#1B4332]">{roleLabel}</span>
+              <span className="text-[#1B4332]/30 text-xs">·</span>
+              <span className="flex items-center gap-1 text-[11px] text-[#4a7c59]">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={loadDashboardStats}
               disabled={dashboardLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:bg-[#3F51B5]/[0.06] border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium bg-white/70 hover:bg-white text-[#1B4332] border border-[#1B4332]/20 cursor-pointer transition-colors disabled:opacity-50 shadow-sm backdrop-blur-sm"
             >
               <RefreshCw className={`size-3.5 ${dashboardLoading ? 'animate-spin' : ''}`} />
               Refresh
@@ -120,6 +154,9 @@ export function DashboardRenderer({
             <ExportMenu runHistory={runHistory} moduleHealth={moduleHealth} />
           </div>
         </div>
+      </div>
+
+      <div className="p-5 space-y-5 max-w-6xl w-full mx-auto">
 
         {/* Loading */}
         {dashboardLoading && !dashboardStats && (
