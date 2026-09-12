@@ -56,7 +56,7 @@ class PBPlaywrightPage(BasePlaywrightPage):
     CONVERSION_RATE = "xpath=//mat-form-field[.//mat-label[contains(.,'Conversion Rate')]]//input"
 
     GST_TOGGLE_SLIDER = "app-slide-toggle-v2 div.slider"
-    TAX_RATE_SELECT   = "xpath=//mat-select[.//span[contains(@class,'mat-mdc-select-placeholder') and contains(.,'Select tax rate')]]"
+    TAX_RATE_SELECT   = "xpath=//mat-form-field[.//mat-label[contains(.,'GST Rate')]]//mat-select"
     GST_TYPE_SELECT   = "xpath=//mat-form-field[.//mat-label[text()='GST Type']]//mat-select"
 
     ADD_BTN    = "button.erp-add-btn"
