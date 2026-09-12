@@ -1013,7 +1013,7 @@ export default function Home() {
                 )}
               </div>
             </ScrollArea>
-            <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}><Image src="/agri2.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} /></div>
+            <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}><Image src="/agri2_1.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} /></div>
           </aside>
         </div>
         {sidebarOpen && <div onMouseDown={handleResizeStart} className="w-1 cursor-col-resize bg-transparent hover:bg-[#3F51B5]/40 active:bg-[#3F51B5]/60 transition-colors shrink-0 relative z-10" />}

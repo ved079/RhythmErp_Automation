@@ -188,7 +188,7 @@ export default function AdminPage() {
               </div>
             </ScrollArea>
             <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}>
-              <Image src="/agri2.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} />
+              <Image src="/agri2_1.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} />
             </div>
           </aside>
         </div>
