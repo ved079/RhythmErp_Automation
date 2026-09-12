@@ -1899,3 +1899,177 @@ class TestQCWithoutPO:
 
         logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
         logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PB created from a QC that has no PO linked
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.po_qc_pb
+class TestPBFromQCWithoutPO:
+    """Create QC (no PO) → create PB from that QC → verify PB shows no PO linked."""
+
+    def test_step1_create_qc(self, logged_in_page, integration_state):
+        item_name  = _QC_NO_PO_ITEM
+        cqp_config = build_cqp_config([item_name], logged_in_page)
+
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.cqp_config = cqp_config
+        qc.item_names = [item_name]
+
+        qc.navigate_to_page()
+        qc.open_add_form()
+
+        _val_select_text(logged_in_page, "Supplier Name", _QC_NO_PO_SUPPLIER)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+
+        _val_select_text(logged_in_page, "Item category", "Bricks & Blocks")
+        _val_select_text(logged_in_page, "Location",      "DHULE")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Department')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Department",   "Procurement Department")
+        _val_fill(logged_in_page, "Conversion Rate", "1")
+        _val_select_text(logged_in_page, "Division",     "STEEL DIVISION")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Type of Sale')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Type of Sale", "1V1")
+        _val_select_text(logged_in_page, "Item Name",    item_name)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        logged_in_page.wait_for_timeout(500)
+
+        logged_in_page.wait_for_selector(qc.QC_PARAM_BTN, timeout=15000)
+        qc.fill_bags_popup(row_index=0)
+        logged_in_page.wait_for_timeout(5000)
+        qc.fill_qc_params_safe(row_index=0)
+
+        _val_fill_native(logged_in_page, "Received Quantity", "1250")
+        logged_in_page.wait_for_timeout(800)
+        qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
+        logged_in_page.wait_for_timeout(500)
+
+        logged_in_page.locator(qc.SUBMIT_BTN).click()
+        logged_in_page.wait_for_selector(".swal2-container", timeout=15000)
+        title = logged_in_page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"Unexpected swal2: {title!r}"
+        try:
+            logged_in_page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        logged_in_page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+        qc_ref = qc.get_ref_no_of_first_row()
+        assert qc_ref, "QC ref must be non-empty"
+        integration_state["pb_flow_qc_ref"]      = qc_ref
+        integration_state["pb_flow_supplier"]    = _QC_NO_PO_SUPPLIER
+        print(f"\n[PB-no-PO] step1: QC created: {qc_ref}")
+
+    def test_step2_create_pb(self, logged_in_page, integration_state):
+        if not integration_state.get("pb_flow_qc_ref"):
+            pytest.skip("QC not created in step 1")
+
+        qc_ref        = integration_state["pb_flow_qc_ref"]
+        supplier_name = integration_state["pb_flow_supplier"]
+
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        pb.open_add_form()
+        pb.select_supplier(supplier_name)
+        pb.select_qc(qc_ref)
+        pb._fill_row_tax(0)
+        pb.fill_conversion_rate(1)
+
+        pb_ref = pb.submit()
+        assert pb_ref, "PB ref must be non-empty"
+        integration_state["pb_flow_pb_ref"] = pb_ref
+        print(f"\n[PB-no-PO] step2: PB created: {pb_ref}")
+
+    def test_step3_verify_pb_in_listing(self, logged_in_page, integration_state):
+        if not integration_state.get("pb_flow_pb_ref"):
+            pytest.skip("PB not created in step 2")
+
+        ref = integration_state["pb_flow_pb_ref"]
+        pb  = PBPlaywrightPage(logged_in_page)
+
+        # Angular hash navigation may leave the edit popup open — dismiss it first
+        try:
+            logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click(force=True)
+            logged_in_page.wait_for_timeout(500)
+        except Exception:
+            pass
+        try:
+            logged_in_page.locator(".override_edit_pop_up").wait_for(state="hidden", timeout=3000)
+        except Exception:
+            pass
+
+        pb.navigate_to_page()
+        logged_in_page.reload()
+        logged_in_page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
+
+        pb.page.locator("button[mattooltip='Search']").click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        if not pb.page.locator("input#erpSearchInput").is_visible():
+            pb.page.locator("button[mattooltip='Search']").click(force=True)
+            logged_in_page.wait_for_timeout(400)
+        pb.page.locator("input#erpSearchInput").fill(ref)
+        pb.page.locator("input#erpSearchInput").press("Enter")
+        pb.page.wait_for_timeout(1500)
+
+        assert pb.page.locator(f"tr:has-text('{ref}')").count() > 0, \
+            f"PB {ref!r} not found in listing"
+        print(f"\n[PB-no-PO] step3: {ref} found in listing ✓")
+
+    def test_step4_verify_no_po_linked(self, logged_in_page, integration_state):
+        if not integration_state.get("pb_flow_pb_ref"):
+            pytest.skip("PB not created in step 2")
+
+        ref    = integration_state["pb_flow_pb_ref"]
+        qc_ref = integration_state["pb_flow_qc_ref"]
+
+        # Force a full reload so Angular resets search state from step3
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        logged_in_page.reload()
+        logged_in_page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
+
+        pb.page.locator("button[mattooltip='Search']").click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        if not pb.page.locator("input#erpSearchInput").is_visible():
+            pb.page.locator("button[mattooltip='Search']").click(force=True)
+            logged_in_page.wait_for_timeout(400)
+        pb.page.locator("input#erpSearchInput").fill(ref)
+        pb.page.locator("input#erpSearchInput").press("Enter")
+        pb.page.wait_for_timeout(1500)
+
+        logged_in_page.locator(f"tr:has-text('{ref}')").first \
+            .locator("button.erp-row-trigger").click(force=True)
+        logged_in_page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+        logged_in_page.locator(
+            ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('View'))"
+        ).click()
+        logged_in_page.wait_for_timeout(1500)
+
+        # PO must be empty
+        po_text = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'PO')]/ancestor::mat-form-field//mat-select"
+        ).first.text_content().strip()
+        assert "select po" in po_text.lower() or po_text == "", \
+            f"Expected no PO linked, got: {po_text!r}"
+
+        # QC must match what we created
+        qc_text = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'QC')]/ancestor::mat-form-field//mat-select"
+        ).first.text_content().strip()
+        assert qc_text == qc_ref, \
+            f"Expected QC={qc_ref!r}, got: {qc_text!r}"
+
+        print(f"\n[PB-no-PO] step4: PO={po_text!r} (none) QC={qc_text!r} ✓")
+
+        logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)
