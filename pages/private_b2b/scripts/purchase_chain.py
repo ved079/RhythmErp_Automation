@@ -1011,6 +1011,143 @@ class PurchaseChain:
             log.warning(f"  CBR rate fetch failed, using random rates: {exc}")
             return {}
 
+    def _resolve_cbr_ranges(self, item_ids: List[int], location_id: int) -> dict:
+        """Return {item_ref_id: {"min": float, "max": float}} from CBR for location.
+
+        Fetches all CBR entries, filters to those matching location_id, and
+        collects minimum_range / maximum_range per item. Returns {} on failure so
+        the caller can decide whether to create CBR or skip clamping.
+        """
+        if not item_ids or not location_id:
+            return {}
+        try:
+            listing = self.client.list_entries("Commodity Base Rate", page_size=500)
+            entries = (listing or {}).get("screenmatlistingdata_set",
+                       (listing or {}).get("results", []))
+            ranges: dict = {}
+            for e in (entries or []):
+                try:
+                    detail = self.client.get_entry("Commodity Base Rate", e["id"])
+                    if not detail:
+                        continue
+                    entry_loc = detail.get("location_ref_id")
+                    if entry_loc is None or int(entry_loc) != int(location_id):
+                        continue
+                    for child in detail.get("children", []):
+                        for row in child.get("details", []):
+                            iid = row.get("item_ref_id")
+                            if iid is None or int(iid) not in item_ids:
+                                continue
+                            iid = int(iid)
+                            mn = row.get("minimum_range")
+                            mx = row.get("maximum_range")
+                            try:
+                                mn = float(mn) if mn is not None else None
+                                mx = float(mx) if mx is not None else None
+                            except (TypeError, ValueError):
+                                continue
+                            if mn is not None or mx is not None:
+                                ranges[iid] = {"min": mn, "max": mx}
+                except Exception:
+                    continue
+            return ranges
+        except Exception as exc:
+            log.warning(f"  CBR range fetch failed: {exc}")
+            return {}
+
+    def _ensure_cbr_for_items(self, items: list, location_id: int, ctx=None) -> dict:
+        """Fetch CBR ranges for ALL items at location; create missing CBR entries and
+        clamp each item's rate to [min_range, max_range].
+
+        Checks every item in the tenant's Item Master (not just the ones in this
+        chain run) and creates one CBR record covering all missing items at once.
+
+        Returns {item_ref_id: {"min": float, "max": float}} for all items that
+        now have a CBR record (after auto-create if needed).
+        """
+        if not location_id:
+            log.warning("  CBR pre-flight: no location_id (parameter6) — skipping")
+            return {}
+
+        # Fetch all items from Item Master, not just the ones in this chain
+        try:
+            all_items_resp = self.client.list_entries("Item Master", page_size=500)
+            all_item_rows = (
+                (all_items_resp or {}).get("screenmatlistingdata_set")
+                or (all_items_resp or {}).get("results")
+                or []
+            )
+            all_item_ids = set(int(r["id"]) for r in all_item_rows if r.get("id"))
+        except Exception as exc:
+            log.warning(f"  CBR pre-flight: could not fetch Item Master list — falling back to chain items: {exc}")
+            all_item_ids = set(int(it["item_ref_id"]) for it in items if it.get("item_ref_id"))
+
+        # Build a rate lookup from the chain items for auto-create fallback
+        chain_rates = {int(it["item_ref_id"]): it for it in items if it.get("item_ref_id")}
+
+        # chain item ids are always included
+        item_ids = all_item_ids | set(chain_rates.keys())
+
+        ranges = self._resolve_cbr_ranges(list(item_ids), location_id)
+        missing = item_ids - set(ranges.keys())
+
+        if missing:
+            log.info(f"  CBR pre-flight: no CBR for {len(missing)} item(s) at location {location_id} — creating one entry: {sorted(missing)}")
+            from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import (
+                build_cbr_api_payload, PRICING_TYPE_ID_MAP,
+            )
+            from datetime import date as _date, timedelta as _timedelta
+            pt_id = PRICING_TYPE_ID_MAP.get("Common", 118)
+            from_dt = f"{(_date.today() - _timedelta(days=1)).isoformat()}T00:00:00Z"
+            to_dt = "2099-12-30T18:30:00Z"
+
+            detail_rows = []
+            row_ranges = {}
+            for iid in sorted(missing):
+                it_detail = chain_rates.get(iid, {})
+                uom_id = it_detail.get("uom") or it_detail.get("alternate_uom")
+                rate = float(it_detail.get("rate") or it_detail.get("base_rate") or 1000)
+                mn = round(rate * 0.5, 2)
+                mx = round(rate * 2.0, 2)
+                detail_rows.append({
+                    "item_ref_id": iid,
+                    "uom": uom_id,
+                    "minimum_range": mn,
+                    "maximum_range": mx,
+                    "details": [],
+                })
+                row_ranges[iid] = {"min": mn, "max": mx}
+
+            payload = build_cbr_api_payload(pt_id, location_id,
+                                            from_date=from_dt, to_date=to_dt,
+                                            detail_rows=detail_rows)
+            try:
+                resp = self.client.create_entry(payload)
+                if resp:
+                    log.info(f"  CBR pre-flight: created CBR at location {location_id} for {len(detail_rows)} item(s): {sorted(missing)}")
+                    ranges.update(row_ranges)
+                else:
+                    log.warning(f"  CBR pre-flight: create returned empty for location {location_id}")
+            except Exception as exc:
+                log.warning(f"  CBR pre-flight: create failed for location {location_id}: {exc}")
+
+        # Clamp each item's rate within its CBR range
+        for it in items:
+            iid = int(it.get("item_ref_id", 0))
+            rng = ranges.get(iid)
+            if not rng:
+                continue
+            rate = float(it.get("rate") or it.get("base_rate") or 0)
+            mn, mx = rng.get("min"), rng.get("max")
+            if mx is not None and rate > mx:
+                log.info(f"  CBR clamp item #{iid}: rate {rate} → {mx} (max)")
+                it["rate"] = mx
+            elif mn is not None and rate < mn:
+                log.info(f"  CBR clamp item #{iid}: rate {rate} → {mn} (min)")
+                it["rate"] = mn
+
+        return ranges
+
     def _resolve_kg_uom_id(self) -> Optional[int]:
         """Return the live ERP ID for the 'KG' UOM entry in this tenant."""
         from common.fk_resolver import FkResolver
@@ -1647,6 +1784,13 @@ class PurchaseChain:
                 if cbr_max is not None:
                     it["rate"] = cbr_max
 
+        # Pre-flight: ensure CBR exists for each item at the PO location and
+        # clamp rates to [min_range, max_range]. GRN validation rejects rates
+        # outside the CBR range, so we must fix rates before creating the PO.
+        if "GRN" in docs or "PB" in docs:
+            _cbr_location = (ctx.parameter6 if ctx else None) or 1
+            self._ensure_cbr_for_items(items, _cbr_location, ctx=ctx)
+
         # Pre-flight: ensure KG→item_UOM conversions exist for bags total_weight
         if "QC" in docs:
             item_uom_ids = [it.get("uom") or it.get("alternate_uom") for it in items]
@@ -1695,7 +1839,7 @@ class PurchaseChain:
                 raise RuntimeError(
                     f"PO creation failed ({self._err_detail(self.po_api, po_payload)})"
                 )
-            po_ref = po_data.get("transaction_ref_no", str(po_id))
+            po_ref = po_data.get("transaction_ref_no") or str(po_id)
             log.info(f"  PO created: ID={po_id}, ref={po_ref}")
 
             po_entry = self.po_api.get_po(po_id)
@@ -1720,6 +1864,9 @@ class PurchaseChain:
                                 items[ji]["rate"] = confirmed
             else:
                 log.warning(f"  Could not fetch PO #{po_id} back — using sent rates")
+
+            if po_entry:
+                po_ref = po_entry.get("transaction_ref_no") or po_ref
 
             if self.delay:
                 time.sleep(self.delay)
@@ -1751,11 +1898,13 @@ class PurchaseChain:
                         f"GP {gi} creation failed (HTTP {self.gp_api._last_status}); "
                         f"response: {gp_data}"
                     )
-                gp_ref = gp_data.get("transaction_ref_no", str(gp_id))
+                gp_ref = gp_data.get("transaction_ref_no") or str(gp_id)
+                time.sleep(max(self.delay or 0, 3))  # let ERP commit GP before GRN
+                _gp_detail = self.gp_api.get_gp(gp_id)
+                if _gp_detail:
+                    gp_ref = _gp_detail.get("transaction_ref_no") or gp_ref
                 gps.append({"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload})
                 log.info(f"  GP {gi}/{len(delivery_plans)} created: ID={gp_id}, ref={gp_ref}")
-                if self.delay:
-                    time.sleep(self.delay)
 
             if "GRN" in docs:
                 # po_quantity = full PO line qty (constant); po_balance_quantity =
@@ -1773,11 +1922,16 @@ class PurchaseChain:
                 grn_data = self.grn_api.create_grn(grn_payload)
                 grn_id = grn_data.get("id") or grn_data.get("entry_id") if grn_data else None
                 if not grn_data or not grn_id:
+                    _grn_resp = self.grn_api._last_response
+                    _grn_body = _grn_resp.text[:400] if _grn_resp is not None else "no response"
                     raise RuntimeError(
                         f"GRN {gi} creation failed (HTTP {self.grn_api._last_status}); "
-                        f"response: {grn_data}"
+                        f"body: {_grn_body} | sent: {json.dumps(grn_payload, default=str)[:300]}"
                     )
-                grn_ref = grn_data.get("transaction_ref_no", str(grn_id))
+                grn_ref = grn_data.get("transaction_ref_no") or str(grn_id)
+                _grn_detail = self.grn_api.get_grn(grn_id)
+                if _grn_detail:
+                    grn_ref = _grn_detail.get("transaction_ref_no") or grn_ref
                 grns.append({"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload})
                 log.info(f"  GRN {gi}/{len(delivery_plans)} created: ID={grn_id}, ref={grn_ref}")
                 for it in gp_items:
@@ -1806,7 +1960,10 @@ class PurchaseChain:
                     raise RuntimeError(
                         f"QC {gi} creation failed ({self._err_detail(self.qc_api, qc_payload)})"
                     )
-                qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
+                qc_ref = qc_data.get("transaction_ref_no") or str(qc_id)
+                _qc_detail = self.qc_api.get_qc(qc_id)
+                if _qc_detail:
+                    qc_ref = _qc_detail.get("transaction_ref_no") or qc_ref
                 qcs.append({"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload})
                 log.info(f"  QC {gi}/{len(delivery_plans)} created: ID={qc_id}, ref={qc_ref}")
                 if self.delay:
@@ -1860,7 +2017,7 @@ class PurchaseChain:
                     qc_items=pb_qc_items,
                 )
                 log.info(f"  PB {gi}/{len(delivery_plans)} payload (first 800 chars): {json.dumps(pb_payload, default=str)[:800]}")
-                pb_data = self.pb_api.create_pb(pb_payload)
+                pb_data, _pb_sub_id = self.pb_api.create_pb(pb_payload)
                 pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
                 if not pb_data or not pb_id:
                     _pb_resp = self.pb_api._last_response
@@ -1870,50 +2027,39 @@ class PurchaseChain:
                         f"PB {gi} creation failed (HTTP {self.pb_api._last_status}); "
                         f"body: {_pb_body} | sent: {_sent}"
                     )
-                pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
-                log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref}")
+                pb_ref = pb_data.get("transaction_ref_no") or str(pb_id)
+                log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref} — streaming events…")
 
-                # Verify the PB survived async accounting.
-                # A ghost PB has transaction_ref_no=None; a real one (Post or Unpost)
-                # always has a ref_no assigned by ERP accounting.  Poll up to ~20s
-                # (3+5+7+5), retry once after 12s cooldown if accounting failed.
+                # Stream ERP async pipeline events instead of polling.
+                # Events are persisted server-side so subscribing after the 201 is safe.
+                # Unknown submission_ids hang forever — hard timeout of 40s covers all steps.
                 _pb_confirmed = False
-                _txn_ref = None
-                for _attempt in range(2):
-                    for _wait in (3, 5, 7, 5):
-                        time.sleep(_wait)
-                        _check = self.pb_api.get_pb(pb_id)
-                        _status = (_check or {}).get("posting_status")
-                        _txn_ref = (_check or {}).get("transaction_ref_no")
-                        if _check and _check.get("id") and _txn_ref:
+                _failed_step = None
+                _pb_event_log = []
+                for _evt in self.pb_api.stream_pb_events(_pb_sub_id, timeout=40):
+                    _step = _evt.get("step", "")
+                    _status = _evt.get("status", "")
+                    _msg = _evt.get("message", "")
+                    log.info(f"  PB events [{_step}] {_status}: {_msg}")
+                    _pb_event_log.append({"step": _step, "status": _status, "message": _msg})
+                    if _status == "FAILED":
+                        _failed_step = f"{_step}: {_msg}"
+                    if _evt.get("is_terminal"):
+                        if _status == "COMPLETED":
                             _pb_confirmed = True
-                            break
-                        if _check and _check.get("id"):
-                            log.info(f"  PB {pb_id} exists but no ref_no yet (posting_status={_status!r}) — waiting…")
-                    if _pb_confirmed:
                         break
-                    if _attempt == 0:
-                        log.warning(
-                            f"  PB {pb_id} has no ref_no after accounting wait "
-                            f"(posting_status={_status!r}) — ERP may have rolled it back. "
-                            f"Waiting 12s and retrying PB creation…"
-                        )
-                        time.sleep(12)
-                        pb_data = self.pb_api.create_pb(pb_payload)
-                        pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
-                        if not pb_data or not pb_id:
-                            log.warning(f"  PB retry also failed — skipping PB for this delivery.")
-                            break
-                        pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
-                        log.info(f"  PB retry created: ID={pb_id}, ref={pb_ref}")
 
-                if not _pb_confirmed:
-                    log.warning(
-                        f"  PB {pb_id} still not confirmed after retry — "
-                        f"accounting failed (check Inventory AD conditions for item type)."
-                    )
+                if _failed_step:
+                    log.warning(f"  PB {pb_id} accounting failed — {_failed_step}")
+                elif not _pb_confirmed:
+                    log.warning(f"  PB {pb_id} events stream timed out or ended without COMPLETED")
 
-                pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload})
+                # One GET to fetch the assigned transaction_ref_no (not in event meta)
+                _pb_detail = self.pb_api.get_pb(pb_id)
+                if _pb_detail:
+                    pb_ref = _pb_detail.get("transaction_ref_no") or pb_ref
+
+                pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload, "events": _pb_event_log})
                 if self.delay:
                     time.sleep(self.delay)
 
@@ -2151,18 +2297,27 @@ class PurchaseChain:
         grn_items = _grn_items_from(items, po_quantity_by_item, balance_by_item)
         overrides = overrides or {}
         if ctx:
-            return build_grn_payload(
+            payload = build_grn_payload(
                 supplier_ref_id=supplier_ref_id,
                 gate_pass_ref_id_id=gp_id,
                 po_ref_id_id=po_id,
                 items=grn_items,
+                base_currency=ctx.base_currency,
+                txn_currency=ctx.txn_currency,
                 parameter1=ctx.parameter1,
                 parameter2=ctx.parameter2,
                 parameter5=ctx.parameter5,
                 parameter6=ctx.parameter6,
-                additional_details={},
-                **overrides,
+                # let build_grn_payload fill in default additional_details (vehicle_no etc.)
             )
+            payload.update({
+                "transaction_ref_no": None,
+                "booking_status": "Pending",
+                "send_back": {"workflow_remark": None, "error_code_id": None},
+                "omitted_fields": [],
+            })
+            payload.update(overrides or {})
+            return payload
         import random
         from pages.private_b2b.modules.goods_receipt_note.data.goods_receipt_note_data import (
             DIVISION_IDS, DEPARTMENT_IDS, LOCATION_IDS, TYPE_OF_SALE_IDS,
@@ -2257,8 +2412,8 @@ class PurchaseChain:
 
         payload = {
             "transaction_date": date.today().isoformat(),
-            "is_tds_applicable": None,
-            "transaction_ref_no": "",
+            "is_tds_applicable": False,
+            "transaction_ref_no": None,
             "supplier_ref_id": supplier_ref_id,
             "supplier_ref_type": supplier_ref_type,
             "tax_registration_status": "Registered",
@@ -2269,22 +2424,34 @@ class PurchaseChain:
             "so_ref_id": None,
             "parameter6": ctx.parameter6 if ctx else 1,
             "parameter2": ctx.parameter2 if ctx else 1,
+            "posting_status": None,
             "parameter1": ctx.parameter1 if ctx else 1,
             "parameter5": ctx.parameter5 if ctx else 1,
             "supplier_payment_terms_ref_id": ctx.pb_payment_terms if ctx else None,
             "txn_currency": ctx.txn_currency if ctx else 8,
             "txn_currency_amount": txn_amount_total,
-            "section_ref_id": None,
+            "purchase_booking_ref_type": 144,
+            "section_ref_id": "0",
             "tds_percent_applicable": None,
             "tds_amount": None,
             "txn_currency_total_amount": total_with_tax,
             "round_off_credit_amount": None,
-            "round_off_debit_amount": 0.0,
+            "round_off_debit_amount": None,
             "remark": None,
             "base_currency": ctx.base_currency if ctx else 8,
-            "conversion_rate": 1.0,
+            "conversion_rate": "1.000000",
             "txn_currency_discount_amount": discount_total,
             "grn_details": [],
+            "qc_summary": {},
+            "item_quality_parameter_ref_id": None,
+            "type_of_bags_ref_id": None,
+            "other_charges": {
+                "agent_ref_id": None,
+                "is_rate_percentage": False,
+                "agent_commision": None,
+                "agent_commision_amount": None,
+            },
+            "omitted_fields": [],
             "purchase_booking_details": pb_items,
         }
         payload.update(overrides or {})
