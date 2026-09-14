@@ -441,6 +441,57 @@ export async function startPurchaseChain(
   }
 }
 
+// ─── PB Concurrency Test ────────────────────────────────
+
+export async function startPbConcurrencyTest(
+  erpToken: string,
+  erpTenantId: string,
+  parallelCount: number,
+  onEvent: (e: SSEEvent) => void,
+  onDone: () => void,
+  onError: (e: Error) => void,
+) {
+  try {
+    const res = await fetch(`${PROXY}?path=pb-concurrency-test`, withCsrf({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        erp_token: erpToken,
+        erp_tenant_id: erpTenantId,
+        parallel_count: parallelCount,
+      }),
+    }));
+
+    if (!res.ok || !res.body) {
+      onError(new Error(`HTTP ${res.status}`));
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const event: SSEEvent = JSON.parse(line.slice(6));
+            onEvent(event);
+          } catch { /* skip malformed */ }
+        }
+      }
+    }
+    onDone();
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 // ─── PB List ────────────────────────────────────────────
 
 export interface PBListItem {

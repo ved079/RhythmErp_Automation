@@ -241,3 +241,15 @@ class AgentStatusResponse(BaseModel):
     pc: str
     status: str  # "ok" | "unreachable"
     latency_ms: float
+
+
+# --- Purchase Booking Concurrency Test ---
+
+class PBConcurrencyTestRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+    parallel_count: int = 3      # number of simultaneous PB submissions
+    supplier_ref_id: int = 1
+    item_ref_ids: Optional[list[int]] = None
+    item_category_id: Optional[int] = None
+    require_tax_rate: bool = True

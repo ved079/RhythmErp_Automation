@@ -34,12 +34,14 @@ from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
     PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, CbrCreateLocationsRequest,
     FetchFkRequest, JVVerifyRequest, InvJVVerifyRequest, PBListRequest,
+    PBConcurrencyTestRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
 from api.batch_create import batch_create_stream, _build_payloads_only, export_batch_excel
 from api.purchase_chain_endpoint import purchase_chain_stream
+from api.pb_concurrency_endpoint import pb_concurrency_stream
 from api.database import init_db
 from api.screenshot_store import take_screenshot
 
@@ -478,6 +480,21 @@ def purchase_chain_endpoint(request: PurchaseChainRequest):
     request.count = max(1, min(request.count, 50))
     return StreamingResponse(
         purchase_chain_stream(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+# ================================================================
+# PB CONCURRENCY TEST ENDPOINT
+# ================================================================
+
+@app.post("/api/pb-concurrency-test")
+def pb_concurrency_test_endpoint(request: PBConcurrencyTestRequest):
+    """Run PO→GP→GRN→QC then fire N identical PB payloads simultaneously (SSE-streamed)."""
+    request.parallel_count = max(2, min(request.parallel_count, 10))
+    return StreamingResponse(
+        pb_concurrency_stream(request),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )

@@ -49,6 +49,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
           { id: 'full-purchase-flow', label: 'Full Purchase Flow' },
           { id: 'full-purchase-flow-jv', label: 'Full Purchase Flow + JV Check' },
           { id: 'qc-formula-check', label: 'QC Formula Validator' },
+          { id: 'purchase-chain-concurrency', label: 'Concurrency Test' },
           { id: 'purchase-order', label: 'Purchase Order', badge: '98 tests', badgeType: 'success' as const },
           { id: 'gate-pass', label: 'Gate Pass', badge: '56 tests', badgeType: 'success' as const },
           { id: 'goods-receipt-note', label: 'Goods Receipt Note', badge: '51 tests', badgeType: 'success' as const },

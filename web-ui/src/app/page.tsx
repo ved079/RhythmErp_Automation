@@ -62,6 +62,7 @@ const PurchaseChainSection = dynamic(() => import('@/components/dialogs/Purchase
 const JVCheckSection = dynamic(() => import('@/components/dialogs/JVCheckSection').then(m => ({ default: m.JVCheckSection })), { ssr: false })
 const QCFormulaSection = dynamic(() => import('@/components/dialogs/QCFormulaSection').then(m => ({ default: m.QCFormulaSection })), { ssr: false })
 const QCPBCrossCheck = dynamic(() => import('@/components/dialogs/QCPBCrossCheck').then(m => ({ default: m.QCPBCrossCheck })), { ssr: false })
+const ConcurrencyTestSection = dynamic(() => import('@/components/dialogs/ConcurrencyTestSection').then(m => ({ default: m.ConcurrencyTestSection })), { ssr: false })
 
 function QCValidatorPanel({ erpToken, erpTenantId, onNeedsToken, onClearToken }: { erpToken: string; erpTenantId: string; onNeedsToken: () => void; onClearToken: () => void }) {
   const [qcSubTab, setQcSubTab] = React.useState<'formula' | 'crosscheck'>('formula')
@@ -1113,6 +1114,27 @@ export default function Home() {
               onClearToken={onClearToken}
             />
           )}
+          {selectedModule === 'purchase-chain-concurrency' && (
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+                <div className="flex items-center h-10 px-4 gap-0">
+                  <div className="flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900">
+                    <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">PB Concurrency Test</h3>
+                  </div>
+                  <div className="flex-1" />
+                  <span className="text-[12px] text-gray-400 dark:text-gray-500">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">Concurrency Test</span></span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 p-4">
+                <ConcurrencyTestSection
+                  erpToken={erpToken}
+                  erpTenantId={erpTenantId}
+                  onNeedsToken={() => setTokenDialogOpen(true)}
+                  onClearToken={onClearToken}
+                />
+              </div>
+            </div>
+          )}
           {selectedModule === 'credentials' && (
             <CredentialsScreen
               erpCredentials={erpCredentials}
@@ -1138,7 +1160,7 @@ export default function Home() {
           {activeTab === 'concurrency' && (
             <ConcurrencyTab modules={sidebarModules} />
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'qc-formula-check' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'qc-formula-check' && selectedModule !== 'credentials' && selectedModule !== 'purchase-chain-concurrency' && activeTab !== 'concurrency' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
