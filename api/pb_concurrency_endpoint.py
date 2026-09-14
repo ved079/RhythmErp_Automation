@@ -165,12 +165,19 @@ def pb_concurrency_stream(request: PBConcurrencyTestRequest) -> Generator[str, N
                 yield _log(f"PB [{i + 1}] REJECTED — null/empty response (ERP may have blocked duplicate)")
                 rejected += 1
             for ev in (r.get("events") or []):
-                ev_type = "error" if ev["status"] == "FAILED" else "log"
-                flag = "!!!" if ev["status"] == "FAILED" else "   "
+                step = ev["step"]
+                status = ev["status"]
+                # Skip noisy: STARTED lines and *_SUCCESS echo steps
+                if status == "STARTED":
+                    continue
+                if step.endswith("_SUCCESS") or step == "PURCHASE_BOOKING_SAVED":
+                    continue
+                ev_type = "error" if status == "FAILED" else "log"
+                flag = "!!!" if status == "FAILED" else "   "
                 msg_suffix = f": {ev['message']}" if ev.get("message") else ""
                 yield _sse(LogEvent(
                     type=ev_type,
-                    message=f"  {flag} PB [{i + 1}] [{ev['step']}] {ev['status']}{msg_suffix}",
+                    message=f"  {flag} PB [{i + 1}] [{step}] {status}{msg_suffix}",
                     timestamp=datetime.now(timezone.utc),
                 ))
 
