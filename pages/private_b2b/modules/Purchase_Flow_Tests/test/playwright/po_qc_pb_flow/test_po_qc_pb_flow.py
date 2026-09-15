@@ -1905,6 +1905,7 @@ class TestQCWithoutPO:
 # PB created from a QC that has no PO linked
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.po_qc_pb
 class TestPBFromQCWithoutPO:
     """Create QC (no PO) → create PB from that QC → verify PB shows no PO linked."""
@@ -2073,3 +2074,193 @@ class TestPBFromQCWithoutPO:
 
         logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
         logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PB blocked when item has no accounting ledger configured
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_PB_ACCT_FAIL_ITEM          = "Cement"
+_PB_ACCT_FAIL_ITEM_CATEGORY = "Cement & Concrete"
+_PB_ACCT_FAIL_SUPPLIER      = "Kagiso Rabada"
+
+
+@pytest.mark.po_qc_pb
+class TestPBBlockedByMissingItemAccounting:
+    """PO → QC → PB: verifies ERP blocks PB when item has no accounting ledger.
+    Expected: tracking card fails at Inventory Accounting Post —
+              'Debit credit sum is not zero'.
+    """
+
+    def test_step1_create_po(self, logged_in_page, integration_state):
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        po.open_add_form()
+
+        _val_select_text(logged_in_page, "Supplier Name", _PB_ACCT_FAIL_SUPPLIER)
+        logged_in_page.wait_for_timeout(1000)
+        _val_select_text(logged_in_page, "Item Category", _PB_ACCT_FAIL_ITEM_CATEGORY)
+        _val_fill(logged_in_page, "Conversion Rate", "1")
+        _val_select_text(logged_in_page, "Location", "DHULE")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Department')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Department", "Procurement Department")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Division')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Division", "STEEL DIVISION")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Type of Sale')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Type of Sale", "1V1")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Delivery Terms')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Delivery Terms", "Spot")
+        _val_select_text(logged_in_page, "Item Name", _PB_ACCT_FAIL_ITEM)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        logged_in_page.wait_for_timeout(500)
+
+        # Use exact-label XPath so "Rate" does not match "Conversion Rate"
+        logged_in_page.locator(
+            "xpath=//mat-label[text()='Quantity']/ancestor::mat-form-field//input"
+        ).first.fill("1000")
+        logged_in_page.wait_for_timeout(300)
+        logged_in_page.locator(
+            "xpath=//mat-label[text()='Rate']/ancestor::mat-form-field//input"
+        ).first.fill("300001")
+        logged_in_page.wait_for_timeout(300)
+        _val_select_text(logged_in_page, "GST Type", "IGST")
+        logged_in_page.wait_for_timeout(500)
+
+        logged_in_page.locator(
+            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+        ).click()
+        logged_in_page.wait_for_selector(".swal2-container", timeout=15000)
+        title = logged_in_page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"Unexpected swal2: {title!r}"
+        try:
+            logged_in_page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        logged_in_page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+
+        po_ref = po.get_first_ref_no()
+        assert po_ref, "PO ref must be non-empty"
+        integration_state["acct_fail_po_ref"] = po_ref
+        print(f"\n[PB-acct-fail] step1: PO created: {po_ref}")
+
+    def test_step2_create_qc(self, logged_in_page, integration_state):
+        if not integration_state.get("acct_fail_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        po_ref     = integration_state["acct_fail_po_ref"]
+        item_name  = _PB_ACCT_FAIL_ITEM
+        cqp_config = build_cqp_config([item_name], logged_in_page)
+
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.cqp_config = cqp_config
+        qc.item_names = [item_name]
+
+        qc.navigate_to_page()
+        qc.open_add_form()
+
+        _val_select_text(logged_in_page, "Supplier Name", _PB_ACCT_FAIL_SUPPLIER)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "Purchase Order", po_ref)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_fill(logged_in_page, "Conversion Rate", "1")
+        logged_in_page.wait_for_timeout(500)
+
+        logged_in_page.wait_for_selector(qc.QC_PARAM_BTN, timeout=15000)
+        qc.fill_bags_popup(row_index=0)
+        logged_in_page.wait_for_timeout(5000)
+
+        # Open QC param popup then fill hardcoded values for Cement: CS=6, TS=6, YS=22
+        qc.open_qc_param_popup(row_index=0)
+        _val_fill(logged_in_page, "Actual Value", "6",  row_index=0)
+        _val_fill(logged_in_page, "Actual Value", "6",  row_index=1)
+        _val_fill(logged_in_page, "Actual Value", "22", row_index=2)
+        qc.click_done()
+        logged_in_page.wait_for_timeout(500)
+
+        qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
+        logged_in_page.wait_for_timeout(500)
+
+        logged_in_page.locator(qc.SUBMIT_BTN).click()
+        logged_in_page.wait_for_selector(".swal2-container", timeout=15000)
+        title = logged_in_page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"Unexpected swal2: {title!r}"
+        try:
+            logged_in_page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        logged_in_page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+
+        qc_ref = qc.get_ref_no_of_first_row()
+        assert qc_ref, "QC ref must be non-empty"
+        integration_state["acct_fail_qc_ref"] = qc_ref
+        print(f"\n[PB-acct-fail] step2: QC created: {qc_ref}")
+
+    def test_step3_submit_pb_expect_accounting_failure(self, logged_in_page, integration_state):
+        if not integration_state.get("acct_fail_qc_ref"):
+            pytest.skip("QC not created in step 2")
+
+        qc_ref = integration_state["acct_fail_qc_ref"]
+
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        pb.open_add_form()
+        pb.select_supplier(_PB_ACCT_FAIL_SUPPLIER)
+        pb.select_qc(qc_ref)
+
+        _val_select_text(logged_in_page, "GST Rate", "31")
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'GST Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(logged_in_page, "GST Type", "IGST")
+        logged_in_page.wait_for_timeout(500)
+        pb.fill_conversion_rate(1)
+
+        logged_in_page.locator(
+            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+        ).click()
+
+        error_text = pb.wait_for_accounting_failure()
+        assert "debit credit sum is not zero" in error_text.lower(), \
+            f"Expected accounting failure, got: {error_text!r}"
+
+        pb.dismiss_failed_tracking_card()
+        print(f"\n[PB-acct-fail] step3: PB correctly blocked — {error_text!r}")
+
+    def test_step4_verify_pb_not_created(self, logged_in_page, integration_state):
+        if not integration_state.get("acct_fail_qc_ref"):
+            pytest.skip("QC not created in step 2")
+
+        qc_ref = integration_state["acct_fail_qc_ref"]
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        logged_in_page.reload()
+        logged_in_page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
+
+        pb.page.locator("button[mattooltip='Search']").click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        if not pb.page.locator("input#erpSearchInput").is_visible():
+            pb.page.locator("button[mattooltip='Search']").click(force=True)
+            logged_in_page.wait_for_timeout(400)
+        pb.page.locator("input#erpSearchInput").fill(qc_ref)
+        pb.page.locator("input#erpSearchInput").press("Enter")
+        pb.page.wait_for_timeout(1500)
+
+        assert pb.page.locator(f"tr:has-text('{qc_ref}')").count() == 0, \
+            f"PB unexpectedly created for QC {qc_ref!r}"
+        print(f"\n[PB-acct-fail] step4: PB listing empty for QC {qc_ref!r} ✓")

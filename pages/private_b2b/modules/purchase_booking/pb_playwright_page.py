@@ -335,6 +335,46 @@ class PBPlaywrightPage(BasePlaywrightPage):
         self.navigate_to_page()
         return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
 
+    def wait_for_accounting_failure(self, timeout_ms=60000):
+        """Wait for a submitted PB tracking card to settle in is-failed state.
+
+        Call this after clicking Submit when the expected outcome is an accounting
+        error (e.g. 'Debit credit sum is not zero').  The card stays visible on
+        failure — this method polls until is-failed class appears, then collects
+        every error message from the failed steps and returns them joined by ' | '.
+
+        Raises RuntimeError if the card disappears (unexpected success) or the
+        timeout is reached before a failed state.
+        """
+        self.page.wait_for_selector(".tracking-card", timeout=15000)
+
+        start = self.page.evaluate("() => Date.now()")
+        while True:
+            card = self.page.locator(".tracking-card")
+            if card.count() == 0:
+                raise RuntimeError(
+                    "PB tracking card disappeared — PB may have succeeded unexpectedly"
+                )
+            classes = card.first.get_attribute("class") or ""
+            if "is-failed" in classes:
+                break
+            elapsed = self.page.evaluate("() => Date.now()") - start
+            if elapsed > timeout_ms:
+                raise RuntimeError(
+                    f"Timed out after {timeout_ms}ms waiting for PB tracking card is-failed state"
+                )
+            self.page.wait_for_timeout(500)
+
+        errors = self.page.locator(".tracking-card .step-error span").all_inner_texts()
+        return " | ".join(e.strip() for e in errors if e.strip())
+
+    def dismiss_failed_tracking_card(self):
+        """Click 'Cancel & exit' on a failed PB tracking card and wait for the listing."""
+        self.page.locator(
+            "xpath=//div[contains(@class,'footer-actions')]//button[contains(.,'Cancel')]"
+        ).click()
+        self.page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=15000)
+
     def get_ref_no_of_first_row(self):
         self.page.wait_for_selector(self.REF_NO_COL, timeout=10000)
         return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
