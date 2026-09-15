@@ -10,7 +10,7 @@ Same QC/GRN/PO can be booked N times simultaneously — all succeed,
 all accounting entries posted (N× the amounts in the ledger).
 
 Usage:
-    python pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/PurchaseFullFlow_Ritik_Testing.py
+    python -m pages.private_b2b.scripts.PurchaseFullFlow_Ritik_Testing
 
 Steps:
     1. Runs a full chain (PO → GP → GRN → QC) to get valid document IDs.
@@ -24,88 +24,11 @@ import sys
 import threading
 import time
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 TENANT = "871"
 N      = 3    # number of parallel PB submissions
-
-
-def build_pb_payload(po_id: int, grn_id: int, qc_id: int) -> dict:
-    return {
-        "transaction_date": "2026-09-12",
-        "is_tds_applicable": False,
-        "transaction_ref_no": None,
-        "supplier_ref_id": 5,
-        "supplier_ref_type": "Supplier",
-        "tax_registration_status": "Registered",
-        "qc_ref_id_id": qc_id,
-        "grn_ref_id_id": grn_id,
-        "po_ref_id_id": po_id,
-        "booking_status": "Pending",
-        "so_ref_id": None,
-        "parameter6": 1,
-        "parameter2": 1,
-        "posting_status": None,
-        "parameter1": 1,
-        "parameter5": 1,
-        "supplier_payment_terms_ref_id": 551,
-        "txn_currency": 8,
-        "txn_currency_amount": 500000.0,
-        "purchase_booking_ref_type": 144,
-        "section_ref_id": "0",
-        "tds_percent_applicable": None,
-        "tds_amount": None,
-        "txn_currency_total_amount": 525000.0,
-        "round_off_credit_amount": None,
-        "round_off_debit_amount": None,
-        "remark": None,
-        "base_currency": 8,
-        "conversion_rate": "1.000000",
-        "txn_currency_discount_amount": 0,
-        "purchase_booking_details": [
-            {
-                "item_ref_id": 5,
-                "alternate_uom": 4,
-                "hsn_sac_no": 1,
-                "uom_conversion": 1.0,
-                "base_rate": 5000.0,
-                "alternate_gate_pass_quantity": 100.0,
-                "grn_alternate_rejected_qty": 0.0,
-                "alternate_qty": 100.0,
-                "total_amount": 500000.0,
-                "no_of_bags": 1,
-                "empty_bag_weight": 1.0,
-                "alternate_net_qty": 99.0,
-                "uom": 3,
-                "net_of_empty_bag_amount": 495000.0,
-                "alternate_deduction_weight": 0.0,
-                "alternate_c_d_deduction": 0.0,
-                "qc_alternate_rejected_qty": 0.0,
-                "alternate_net_purchase_qty": 0.0,
-                "empty_bags_txn_amount": 5000.0,
-                "qc_deduction_amount": 0.0,
-                "transaction_amount_without_discount": 500000.0,
-                "discount_percentage": 0.0,
-                "txn_currency_discount_amount_details": 0.0,
-                "txn_currency_amount_detail": 500000.0,
-                "tax_rate": 5.0,
-                "gst_type": "IGST",
-                "txn_currency_igst_rate": 5.0,
-                "txn_currency_igst_amount": 25000.0,
-                "txn_currency_cgst_rate": None,
-                "txn_currency_cgst_amount": 0.0,
-                "txn_currency_sgst_rate": None,
-                "txn_currency_sgst_amount": 0.0,
-                "txn_currency_tax_amount": 25000.0,
-                "labour_charges": 0.0,
-                "transport": 0.0,
-                "advance_paid": None,
-                "txn_currency_total_txn_amount": 525000.0,
-                "rate": 5000.0,
-            }
-        ],
-    }
 
 
 def run():
@@ -118,7 +41,7 @@ def run():
     tenant = input(f"Tenant ID [{TENANT}]: ").strip() or TENANT
 
     from common.erp_api_client import RhythmERPAPIClient
-    from pages.private_b2b.scripts.purchase_chain import PurchaseChain
+    from pages.private_b2b.scripts.purchase_chain import PurchaseChain, _pb_items_from_qc
     from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils import PBAPIUtils
 
     # Step 1 — build chain up to QC
@@ -128,9 +51,63 @@ def run():
     po_id  = (result.get("po") or {}).get("id")
     grn_id = (result.get("grn") or {}).get("id")
     qc_id  = (result.get("qc") or {}).get("id")
-    print(f"  PO={po_id}  GRN={grn_id}  QC={qc_id}\n")
+    ctx    = result.get("ctx")
+    qc_data = (result.get("qc") or {}).get("data") or {}
+    print(f"  PO={po_id}  GRN={grn_id}  QC={qc_id}")
+    print(f"  supplier={ctx.supplier_ref_id if ctx else '?'}  item={ctx.item_ref_id if ctx else '?'}  currency={ctx.txn_currency if ctx else '?'}\n")
 
-    payload = build_pb_payload(po_id, grn_id, qc_id)
+    # Build PB payload dynamically from the chain context and actual QC line items
+    qc_items = qc_data.get("qc_details") or []
+    pb_items = _pb_items_from_qc(qc_items, ctx=ctx)
+    txn_amount_total = round(sum(float(it.get("txn_currency_amount_detail") or 0.0) for it in pb_items), 6)
+    discount_total   = round(sum(float(it.get("txn_currency_discount_amount_details") or 0.0) for it in pb_items), 6)
+    total_with_tax   = round(sum(float(it.get("txn_currency_total_txn_amount") or 0.0) for it in pb_items), 6)
+
+    from datetime import date
+    payload = {
+        "transaction_date": date.today().isoformat(),
+        "is_tds_applicable": False,
+        "transaction_ref_no": None,
+        "supplier_ref_id": ctx.supplier_ref_id if ctx else None,
+        "supplier_ref_type": ctx.supplier_ref_type if ctx else "Supplier",
+        "tax_registration_status": "Registered",
+        "qc_ref_id_id": qc_id,
+        "grn_ref_id_id": grn_id,
+        "po_ref_id_id": po_id,
+        "booking_status": "Pending",
+        "so_ref_id": None,
+        "parameter6": ctx.parameter6 if ctx else 1,
+        "parameter2": ctx.parameter2 if ctx else 1,
+        "posting_status": None,
+        "parameter1": ctx.parameter1 if ctx else 1,
+        "parameter5": ctx.parameter5 if ctx else 1,
+        "supplier_payment_terms_ref_id": ctx.pb_payment_terms if ctx else None,
+        "txn_currency": ctx.txn_currency if ctx else 8,
+        "txn_currency_amount": txn_amount_total,
+        "purchase_booking_ref_type": 144,
+        "section_ref_id": "0",
+        "tds_percent_applicable": None,
+        "tds_amount": None,
+        "txn_currency_total_amount": total_with_tax,
+        "round_off_credit_amount": None,
+        "round_off_debit_amount": None,
+        "remark": None,
+        "base_currency": ctx.base_currency if ctx else 8,
+        "conversion_rate": "1.000000",
+        "txn_currency_discount_amount": discount_total,
+        "grn_details": [],
+        "qc_summary": {},
+        "item_quality_parameter_ref_id": None,
+        "type_of_bags_ref_id": None,
+        "other_charges": {
+            "agent_ref_id": None,
+            "is_rate_percentage": False,
+            "agent_commision": None,
+            "agent_commision_amount": None,
+        },
+        "omitted_fields": [],
+        "purchase_booking_details": pb_items,
+    }
 
     # Step 2 — fire N identical PB payloads simultaneously
     results: dict = {}
