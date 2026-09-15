@@ -2184,12 +2184,7 @@ class TestPBBlockedByMissingItemAccounting:
         qc.fill_bags_popup(row_index=0)
         logged_in_page.wait_for_timeout(5000)
 
-        # Open QC param popup then fill hardcoded values for Cement: CS=6, TS=6, YS=22
-        qc.open_qc_param_popup(row_index=0)
-        _val_fill(logged_in_page, "Actual Value", "6",  row_index=0)
-        _val_fill(logged_in_page, "Actual Value", "6",  row_index=1)
-        _val_fill(logged_in_page, "Actual Value", "22", row_index=2)
-        qc.click_done()
+        qc.fill_qc_params_safe(row_index=0)
         logged_in_page.wait_for_timeout(500)
 
         qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
@@ -2461,12 +2456,11 @@ class TestFarmerQCAndPB:
         _val_fill(page, "Received Quantity", _FARMER_QC_PB_RECV_QTY)
         page.wait_for_timeout(500)
 
-        # QC params popup: CS=11.1, TS=4.1, YS=11.1 (from recorder)
-        qc.open_qc_param_popup(row_index=0)
-        _val_fill(page, "Actual Value", "11.1", row_index=0)
-        _val_fill(page, "Actual Value", "4.1",  row_index=1)
-        _val_fill(page, "Actual Value", "11.1", row_index=2)
-        qc.click_done()
+        # Fetch CQP config and fill actual values dynamically per item
+        cqp_config = build_cqp_config([_FARMER_QC_PB_ITEM_NAME], page)
+        qc.cqp_config = cqp_config
+        qc.item_names = [_FARMER_QC_PB_ITEM_NAME]
+        qc.fill_qc_params_safe(row_index=0)
         page.wait_for_timeout(500)
 
         page.locator(qc.SUBMIT_BTN).click()
@@ -2528,3 +2522,335 @@ class TestFarmerQCAndPB:
         assert pb.page.locator(f"tr:has-text('{pb_ref}')").count() > 0, \
             f"PB {pb_ref!r} not found in listing after creation"
         print(f"\n[farmer-qc-pb] step4: {pb_ref!r} found in PB listing ✓")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestMultiItemPOQCPB
+# 4-item PO → QC → PB end-to-end (supplier: Tim David)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_MI_SUPPLIER       = "Tim David"
+_MI_ITEM_CATEGORY  = "Bricks & Blocks"
+_MI_LOCATION       = "DHULE"
+_MI_DEPARTMENT     = "Procurement Department"
+_MI_DIVISION       = "STEEL DIVISION"
+_MI_TYPE_OF_SALE   = "1V1"
+_MI_DELIVERY_TERMS = "Spot"
+
+# (item_name, qty, rate, tax_rate)
+_MI_ROWS = [
+    ("Welding Electrode FLUID TRANSFER ABRASION RESISTANT REINFORCED TYPE", "2500", "25000",  "60"),
+    ("GI Wire SEALING COMPONENT HEAT RESISTANT NBR MATERIAL",               "2500", "25000",  "64"),
+    ("Silica Sand Powder",                                                   "3000", "300000", "70"),
+    ("Fly Ash",                                                              "3500", "25000",  "72"),
+]
+
+
+@pytest.mark.po_qc_pb
+class TestMultiItemPOQCPB:
+    """4-item PO → QC → PB end-to-end: verifies multi-row QC deduction and PB creation."""
+
+    # ── Step 1: Create 4-item PO ─────────────────────────────────────────────
+
+    def test_step1_create_po(self, logged_in_page, integration_state):
+        page = logged_in_page
+        po   = POPlaywrightPage(page)
+        po.navigate_to_page()
+        page.reload()
+        po.open_add_form()
+
+        _val_select_text(page, "Supplier Name", _MI_SUPPLIER)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Ref Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+
+        _val_select_text(page, "Item Category", _MI_ITEM_CATEGORY)
+        _val_select_text(page, "Location",       _MI_LOCATION)
+        _val_select_text(page, "Department",     _MI_DEPARTMENT)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Division')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Division",       _MI_DIVISION)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Type of Sale')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Type of Sale",   _MI_TYPE_OF_SALE)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Delivery Terms')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Delivery Terms", _MI_DELIVERY_TERMS)
+
+        # Row 0 is already present; add rows 1-3
+        for i, (item, qty, rate, tax_rate) in enumerate(_MI_ROWS):
+            if i > 0:
+                page.locator("button.add-row-btn").click()
+                page.wait_for_timeout(800)
+
+            _val_select_text(page, "Item Name", item, row_index=i)
+            page.locator(
+                "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+            ).nth(i).wait_for(state="visible", timeout=10000)
+
+            _val_fill(page, "Quantity", qty, row_index=i)
+            # Use exact-text xpath for Rate to avoid matching "Tax Rate"
+            page.locator(
+                "xpath=//mat-label[text()='Rate']/ancestor::mat-form-field//input"
+            ).nth(i).fill(rate)
+            page.wait_for_timeout(300)
+
+            _val_select_text(page, "GST Type", "IGST", row_index=i)
+            page.locator(
+                "xpath=//mat-label[contains(.,'Tax Rate')]/ancestor::mat-form-field//mat-select"
+            ).nth(i).wait_for(state="visible", timeout=10000)
+            _val_select_text(page, "Tax Rate", tax_rate, row_index=i)
+            page.wait_for_timeout(500)
+
+        page.locator(
+            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+        ).click()
+        page.wait_for_selector(".swal2-container", timeout=15000)
+        title = page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"PO submit unexpected swal2: {title!r}"
+        try:
+            page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+
+        po_ref = po.get_first_ref_no()
+        assert po_ref, "PO ref must be non-empty"
+        integration_state["mi_po_ref"] = po_ref
+        print(f"\n[multi-item] step1: PO created = {po_ref!r}")
+
+    # ── Step 2: Create QC linked to PO (4 rows) ──────────────────────────────
+
+    def test_step2_create_qc(self, logged_in_page, integration_state):
+        if not integration_state.get("mi_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        po_ref = integration_state["mi_po_ref"]
+        page   = logged_in_page
+        qc     = QCPlaywrightPage(page)
+
+        item_names = [row[0] for row in _MI_ROWS]
+        cqp_config = build_cqp_config(item_names, page)
+        qc.cqp_config  = cqp_config
+        qc.item_names  = item_names
+
+        qc.navigate_to_page()
+        page.reload()
+        qc.open_add_form()
+
+        _val_select_text(page, "Supplier Name", _MI_SUPPLIER)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Purchase Order", po_ref)
+        page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).nth(0).wait_for(state="visible", timeout=15000)
+        _val_fill(page, "Conversion Rate", "1")
+        page.wait_for_timeout(500)
+
+        # Bags popup + QC params for each of the 4 rows
+        bags_kwargs = [
+            {"no_of_bags": "1",  "per_bag_weight": "0.2"},   # row 0
+            {"no_of_bags": "1"},                              # row 1 — default weight
+            {"no_of_bags": "10"},                             # row 2
+            {"no_of_bags": "10"},                             # row 3
+        ]
+        for i in range(len(_MI_ROWS)):
+            page.wait_for_selector(qc.QC_PARAM_BTN, timeout=15000)
+            qc.fill_bags_popup(row_index=i, **bags_kwargs[i])
+            page.wait_for_timeout(500)
+            qc.fill_qc_params_safe(row_index=i)
+            page.wait_for_timeout(500)
+
+        page.wait_for_timeout(3000)
+        page.locator(qc.SUBMIT_BTN).click()
+        page.wait_for_selector(".swal2-container", timeout=15000)
+        title = page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"QC submit unexpected swal2: {title!r}"
+        try:
+            page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+
+        qc_ref = qc.get_ref_no_of_first_row()
+        assert qc_ref, "QC ref must be non-empty"
+        integration_state["mi_qc_ref"] = qc_ref
+        print(f"\n[multi-item] step2: QC created = {qc_ref!r}")
+
+    # ── Step 3: Create PB from QC ────────────────────────────────────────────
+
+    def test_step3_create_pb(self, logged_in_page, integration_state):
+        if not integration_state.get("mi_qc_ref"):
+            pytest.skip("QC not created in step 2")
+
+        qc_ref = integration_state["mi_qc_ref"]
+        page   = logged_in_page
+        pb     = PBPlaywrightPage(page)
+        pb.navigate_to_page()
+        page.reload()
+        pb.open_add_form()
+
+        pb.select_supplier(_MI_SUPPLIER)
+        pb.select_qc(qc_ref)
+        page.wait_for_timeout(1000)
+
+        # Select GST Type=IGST for all 4 rows
+        for i in range(len(_MI_ROWS)):
+            _val_select_text(page, "GST Type", "IGST", row_index=i)
+            page.wait_for_timeout(400)
+        page.locator(
+            "xpath=//mat-label[contains(.,'IGST Rate')]/ancestor::mat-form-field//input"
+        ).nth(0).wait_for(state="visible", timeout=10000)
+        page.wait_for_timeout(500)
+
+        pb_ref = pb.submit()
+        assert pb_ref, "PB ref must be non-empty"
+        integration_state["mi_pb_ref"] = pb_ref
+        print(f"\n[multi-item] step3: PB created = {pb_ref!r}")
+
+    # ── Step 4: Verify PB in listing ─────────────────────────────────────────
+
+    def test_step4_verify_pb_in_listing(self, logged_in_page, integration_state):
+        if not integration_state.get("mi_pb_ref"):
+            pytest.skip("PB not created in step 3")
+
+        pb_ref = integration_state["mi_pb_ref"]
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        logged_in_page.reload()
+
+        pb.page.locator("button[mattooltip='Search']").click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        if not pb.page.locator("input#erpSearchInput").is_visible():
+            pb.page.locator("button[mattooltip='Search']").click(force=True)
+            logged_in_page.wait_for_timeout(400)
+        pb.page.locator("input#erpSearchInput").fill(pb_ref)
+        pb.page.locator("input#erpSearchInput").press("Enter")
+        pb.page.wait_for_timeout(1500)
+
+        assert pb.page.locator(f"tr:has-text('{pb_ref}')").count() > 0, \
+            f"PB {pb_ref!r} not found in listing"
+        print(f"\n[multi-item] step4: {pb_ref!r} found in PB listing ✓")
+
+    # ── Step 5: View QC and verify computed columns ───────────────────────────
+
+    def test_step5_view_qc(self, logged_in_page, integration_state):
+        if not integration_state.get("mi_qc_ref"):
+            pytest.skip("QC not created in step 2")
+
+        qc_ref = integration_state["mi_qc_ref"]
+        po_ref = integration_state["mi_po_ref"]
+        page   = logged_in_page
+        qc     = QCPlaywrightPage(page)
+
+        qc.navigate_to_page()
+        page.reload()
+
+        # Search and open View
+        page.locator("button[mattooltip='Search']").click(force=True)
+        page.wait_for_timeout(600)
+        if not page.locator("input#erpSearchInput").is_visible():
+            page.locator("button[mattooltip='Search']").click(force=True)
+            page.wait_for_timeout(400)
+        page.locator("input#erpSearchInput").fill(qc_ref)
+        page.locator("input#erpSearchInput").press("Enter")
+        page.wait_for_timeout(1500)
+        assert page.locator(f"tr:has-text('{qc_ref}')").count() > 0, \
+            f"QC {qc_ref!r} not found in listing"
+        qc.click_row_action(0, "View")
+        page.wait_for_selector("mat-form-field", timeout=15000)
+
+        # Header assertions
+        page.locator(
+            f"xpath=//mat-label[contains(.,'Purchase Order')]/ancestor::mat-form-field//mat-select"
+        ).nth(0).wait_for(state="visible", timeout=10000)
+        assert page.locator(
+            f"xpath=//mat-label[contains(.,'Supplier Name')]/ancestor::mat-form-field"
+            f"//mat-select[contains(.,'{_MI_SUPPLIER}')]"
+        ).count() > 0, f"Supplier Name != {_MI_SUPPLIER!r}"
+        assert page.locator(
+            f"xpath=//mat-label[contains(.,'Purchase Order')]/ancestor::mat-form-field"
+            f"//mat-select[contains(.,'{po_ref}')]"
+        ).count() > 0, f"PO ref not shown in QC view"
+
+        # Per-row computed columns from the recorder (Purchase Rate settles at 300000 for all rows)
+        _QC_VIEW_ROWS = [
+            dict(purchase_rate="300000", recv_qty="2500",
+                 gross_amt="750000000",  no_of_bags="1",
+                 eb_qty="130.976",       eb_ded_amt="39292800",
+                 neb_qty="2369.024",     neb_amt="710707200",
+                 qc_pct="20.972",        qc_ded_rate="62916",
+                 qc_ded_qty="496.832",   qc_ded_amt="149049513.984",
+                 before_cd="561657686.02", cd_amt="0",
+                 net_purchase_qty="0",   net_purchase_amt="561657686.02",
+                 net_purchase_rate="237084"),
+            dict(purchase_rate="300000", recv_qty="2500",
+                 gross_amt="750000000",  no_of_bags="1",
+                 eb_qty="20",            eb_ded_amt="6000000",
+                 neb_qty="2480",         neb_amt="744000000",
+                 qc_pct="8.48",          qc_ded_rate="25440",
+                 qc_ded_qty="210.304",   qc_ded_amt="63091200",
+                 before_cd="680908800",  cd_amt="0",
+                 net_purchase_qty="0",   net_purchase_amt="680908800",
+                 net_purchase_rate="274560"),
+            dict(purchase_rate="300000", recv_qty="3000",
+                 gross_amt="900000000",  no_of_bags="10",
+                 eb_qty="2",             eb_ded_amt="600000",
+                 neb_qty="2998",         neb_amt="899400000",
+                 qc_pct="0.001",         qc_ded_rate="3",
+                 qc_ded_qty="0.03",      qc_ded_amt="8994",
+                 before_cd="899391006",  cd_amt="0",
+                 net_purchase_qty="0",   net_purchase_amt="899391006",
+                 net_purchase_rate="299997"),
+            dict(purchase_rate="300000", recv_qty="3500",
+                 gross_amt="1050000000", no_of_bags="10",
+                 eb_qty="2",             eb_ded_amt="600000",
+                 neb_qty="3498",         neb_amt="1049400000",
+                 qc_pct="0.001",         qc_ded_rate="3",
+                 qc_ded_qty="0.035",     qc_ded_amt="10494",
+                 before_cd="1049389506", cd_amt="0",
+                 net_purchase_qty="0",   net_purchase_amt="1049389506",
+                 net_purchase_rate="299997"),
+        ]
+
+        label_field_map = [
+            ("Purchase Rate",               "purchase_rate"),
+            ("Received Quantity",            "recv_qty"),
+            ("Gross Purchase Amount",        "gross_amt"),
+            ("No. of Bags",                  "no_of_bags"),
+            ("Empty Bag Qty",                "eb_qty"),
+            ("Empty Bag Deduction Amount",   "eb_ded_amt"),
+            ("Net of Empty Bag Qty",         "neb_qty"),
+            ("Net of Empty Bag Amount",      "neb_amt"),
+            ("QC Deduction %",               "qc_pct"),
+            ("QC Deduction Rate",            "qc_ded_rate"),
+            ("QC Deduction Qty",             "qc_ded_qty"),
+            ("QC Deduction Amount",          "qc_ded_amt"),
+            ("Purchase Amount Before CD",    "before_cd"),
+            ("Cash Discount Amount",         "cd_amt"),
+            ("Net Purchase Qty.",            "net_purchase_qty"),
+            ("Net Purchase Amount",          "net_purchase_amt"),
+            ("Net Purchase Rate",            "net_purchase_rate"),
+        ]
+
+        for i, row in enumerate(_QC_VIEW_ROWS):
+            for label, key in label_field_map:
+                expected = row[key]
+                loc = page.locator(
+                    f"xpath=//mat-label[contains(.,'{label}')]/ancestor::mat-form-field//input"
+                ).nth(i)
+                actual = (loc.input_value() if loc.count() > 0 else "").strip()
+                assert actual == expected, \
+                    f"Row {i} '{label}': expected {expected!r}, got {actual!r}"
+
+        # Close view
+        page.locator("button[aria-label='close'], button.close-btn").first.click()
+        page.wait_for_timeout(500)
+        print(f"\n[multi-item] step5: QC {qc_ref!r} computed columns verified ✓")

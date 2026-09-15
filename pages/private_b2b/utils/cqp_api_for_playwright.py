@@ -152,10 +152,10 @@ def _fetch_cqp_for_item(client: RhythmERPAPIClient, item_ref_id: int,
             continue
 
         # Found the entry for this item — parse children → details.
-        # Group by quality_type and keep the lowest min_quality_value per param
-        # (CQP can have multiple rows per param with different grade ranges).
+        # Group by quality_type; collect ALL slabs per param sorted by min_q.
+        # slabs[0] = slab1 (typically mult=0), slabs[1] = slab2 (non-zero mult), etc.
         qp_names = qp_names or {}
-        grouped = {}  # quality_type_id → {"param": name, "min_q": float, "max_q": float, ...}
+        grouped = {}  # quality_type_id → {"param": str, "slabs": [...sorted by min_q...]}
 
         def _f(v):
             try:
@@ -190,18 +190,30 @@ def _fetch_cqp_for_item(client: RhythmERPAPIClient, item_ref_id: int,
                 max_q  = max_q if max_q is not None else 100.0
                 mult   = mult  if mult  is not None else 1.0
 
-                if qt_key not in grouped:
-                    grouped[qt_key] = {
-                        "param": param_label, "min_q": min_q,
-                        "max_q": max_q, "multiplier": mult, "is_pct": is_pct,
-                    }
-                else:
-                    # Keep the lowest min_q across all rows for this param
-                    if min_q < grouped[qt_key]["min_q"]:
-                        grouped[qt_key]["min_q"] = min_q
+                slab = {"min_q": min_q, "max_q": max_q, "multiplier": mult, "is_pct": is_pct}
 
-        params = list(grouped.values())
-        print(f"[CQP-API] item_ref_id={item_ref_id} → {[p['param'] + '=' + str(p['min_q']) for p in params]}")
+                if qt_key not in grouped:
+                    grouped[qt_key] = {"param": param_label, "slabs": [slab]}
+                else:
+                    grouped[qt_key]["slabs"].append(slab)
+
+        # Sort slabs by min_q so slabs[0]=slab1, slabs[1]=slab2, etc.
+        # Expose slab1 fields at top level for backward compatibility.
+        params = []
+        for entry in grouped.values():
+            entry["slabs"].sort(key=lambda s: s["min_q"])
+            slab1 = entry["slabs"][0]
+            params.append({
+                "param":      entry["param"],
+                "min_q":      slab1["min_q"],
+                "max_q":      slab1["max_q"],
+                "multiplier": slab1["multiplier"],
+                "is_pct":     slab1["is_pct"],
+                "slabs":      entry["slabs"],
+            })
+
+        print(f"[CQP-API] item_ref_id={item_ref_id} → "
+              f"{[p['param'] + '(' + str(len(p['slabs'])) + ' slabs)' for p in params]}")
         return params
 
     print(f"[CQP-API] No CQP entry found for item_ref_id={item_ref_id}")

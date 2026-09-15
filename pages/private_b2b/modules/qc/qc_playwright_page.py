@@ -508,11 +508,23 @@ class QCPlaywrightPage(BasePlaywrightPage):
         return float(val) if val else None
 
     def safe_actual_values(self, row_index=0, max_pct=20):
-        """Return actual values that produce a small positive deduction.
+        """Return actual values that produce a small, meaningful positive deduction.
 
-        Uses max_q + 0.1 per param: puts actual just inside slab2 (slab1
-        has multiplier=0 → 0% deduction which ERP rejects; slab2 gives a
-        tiny but valid positive deduction).
+        Formula (reverse-engineered from ERP math):
+          deduction_% = (actual - slab1.max_q) × slab2.multiplier
+
+        Strategy:
+        - All params stay at slab1.max_q (mult=0, deduction=0%).
+        - Exactly ONE "push param" is moved to int(slab2.max_q) — deep into slab2.
+          This gives a real, non-zero deduction: (int(slab2.max_q) - slab1.max_q) × mult2.
+        - The push param is the one with the smallest candidate deduction
+          (min risk of hitting the 85% ceiling).
+
+        Example for Cement:
+          TS candidate = (int(6.01) - 4) × 2 = 4%   ← push this one
+          CS candidate = (int(27)   - 12) × 2.03 = 30%
+          YS candidate = (int(24.5) - 12) × 1.3  = 16%
+          Result: CS=12, TS=6, YS=12  →  total deduction = 4%
         """
         params = []
         item_names = getattr(self, "item_names", [])
@@ -523,11 +535,47 @@ class QCPlaywrightPage(BasePlaywrightPage):
         if not params:
             return [1, 1, 1]
 
-        result = []
-        for p in params:
-            result.append(round(p["max_q"] + 0.1, 2))
-        label = item_names[row_index] if item_names else "?"
-        pairs = [p["param"] + "=" + str(v) for p, v in zip(params, result)]
+        result = [None] * len(params)
+
+        # Classify each param by its slab structure:
+        #   Pattern A: slab1 mult=0, slab2 exists with mult>0  → stay at slab1.max_q (0% deduction)
+        #              one "push param" gets int(slab2.max_q)   → small positive deduction
+        #   Pattern B: single slab with mult>0 already          → use min_q + 1 (1 unit deduction)
+        pattern_a_idx = []  # indices where slab1.mult==0 and slab2 exists
+        pattern_b_idx = []  # indices where only 1 slab and mult>0
+
+        for i, p in enumerate(params):
+            slabs = p.get("slabs", [])
+            slab1 = slabs[0] if slabs else p
+            if len(slabs) >= 2 and slab1["multiplier"] == 0:
+                pattern_a_idx.append(i)
+            elif slab1["multiplier"] != 0:
+                pattern_b_idx.append(i)
+            else:
+                # slab1 mult=0 but no slab2 — stay at max_q
+                result[i] = round(slab1["max_q"], 2)
+
+        # Pattern B: single slab, non-zero mult — use min_q + 1
+        for i in pattern_b_idx:
+            slabs = params[i].get("slabs", [])
+            slab1 = slabs[0] if slabs else params[i]
+            result[i] = round(slab1["min_q"] + 1, 2)
+
+        # Pattern A: all stay at slab1.max_q except the one push param
+        for i in pattern_a_idx:
+            result[i] = round(params[i]["max_q"], 2)
+
+        if pattern_a_idx:
+            # Pick push param: smallest candidate_deduction = (int(slab2.max_q) - slab1.max_q) × slab2.mult
+            best_i = min(
+                pattern_a_idx,
+                key=lambda i: (int(params[i]["slabs"][1]["max_q"]) - params[i]["slabs"][0]["max_q"])
+                              * params[i]["slabs"][1]["multiplier"]
+            )
+            result[best_i] = int(params[best_i]["slabs"][1]["max_q"])
+
+        label = item_names[row_index] if item_names and row_index < len(item_names) else "?"
+        pairs = [params[i]["param"] + "=" + str(result[i]) for i in range(len(params))]
         print(f"[QC] safe_actual_values for '{label}': {pairs}")
         return result
 

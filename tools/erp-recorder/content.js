@@ -24,6 +24,9 @@ window.__erpRecorderInjected = true;
   let readonlyScanTimer = null;
   let readonlyScanning = false;
 
+  // View-mode flag: set when user opens a View form; cleared on dialog-close / nav
+  let viewMode = false;
+
   // Red-line validation error messages already recorded (mat-error / red-line)
   const recordedErrors = new Set();
 
@@ -90,6 +93,20 @@ window.__erpRecorderInjected = true;
     #__erp_rec_cnt { color: #484f58; font-size: 10px; min-width: 44px; text-align: right; }
     #__erp_rec_cnt.has-steps { color: #c9d1d9; }
 
+    #__erp_rec_view_badge {
+      display: none; font-size: 9px; letter-spacing: .06em; font-weight: 600;
+      color: #58a6ff; background: rgba(56,139,253,.12); border: 1px solid rgba(56,139,253,.3);
+      border-radius: 3px; padding: 2px 5px;
+    }
+    #__erp_rec_view_badge.on { display: inline-block; }
+    #__erp_rec_cap_all {
+      display: none; background: #0d419d; border: 1px solid #58a6ff; color: #58a6ff;
+      padding: 3px 9px; border-radius: 4px; font: 10px/1 'Consolas','Monaco',monospace;
+      cursor: pointer; letter-spacing: .04em; transition: background .15s;
+    }
+    #__erp_rec_cap_all:hover { background: #1158c7; }
+    #__erp_rec_cap_all.on { display: inline-block; }
+
     .__erp_icon_btn {
       background: transparent; border: none; color: #484f58;
       font: 12px/1 'Consolas','Monaco',monospace; cursor: pointer;
@@ -108,6 +125,8 @@ window.__erpRecorderInjected = true;
       <span id="__erp_rec_lbl">IDLE</span>
       <button class="__erp_btn" id="__erp_rec_btn">Start</button>
       <button class="__erp_btn" id="__erp_rec_clr">Clear</button>
+      <span id="__erp_rec_view_badge">VIEW</span>
+      <button class="__erp_btn" id="__erp_rec_cap_all" title="Capture all fields on this view form">Cap All</button>
       <span id="__erp_rec_cnt">0 steps</span>
       <button class="__erp_icon_btn" id="__erp_rec_view" title="Open full view">↗</button>
       <button class="__erp_icon_btn" id="__erp_rec_min" title="Minimize">—</button>
@@ -150,16 +169,22 @@ window.__erpRecorderInjected = true;
     e.stopPropagation();
     bar.classList.add('mini');
   });
+  document.getElementById('__erp_rec_cap_all').addEventListener('click', e => {
+    e.stopPropagation();
+    if (recording && viewMode) captureAllViewFields();
+  });
   document.getElementById('__erp_rec_mini').addEventListener('click', () => {
     bar.classList.remove('mini');
   });
 
   function setBarState() {
-    const dot  = document.getElementById('__erp_rec_dot');
-    const dot2 = document.getElementById('__erp_rec_dot2');
-    const lbl  = document.getElementById('__erp_rec_lbl');
-    const btn  = document.getElementById('__erp_rec_btn');
-    const cnt  = document.getElementById('__erp_rec_cnt');
+    const dot    = document.getElementById('__erp_rec_dot');
+    const dot2   = document.getElementById('__erp_rec_dot2');
+    const lbl    = document.getElementById('__erp_rec_lbl');
+    const btn    = document.getElementById('__erp_rec_btn');
+    const cnt    = document.getElementById('__erp_rec_cnt');
+    const badge  = document.getElementById('__erp_rec_view_badge');
+    const capAll = document.getElementById('__erp_rec_cap_all');
     if (recording) {
       dot.classList.add('on'); dot2.classList.add('on'); lbl.classList.add('on');
       lbl.textContent = 'REC'; btn.textContent = 'Stop'; btn.classList.add('stop');
@@ -172,6 +197,9 @@ window.__erpRecorderInjected = true;
     }
     cnt.textContent = steps.length + (steps.length === 1 ? ' step' : ' steps');
     cnt.classList.toggle('has-steps', steps.length > 0);
+    // Show VIEW badge + Cap All button only while in view mode
+    badge.classList.toggle('on',  recording && viewMode);
+    capAll.classList.toggle('on', recording && viewMode);
   }
 
   function toggleRec() {
@@ -192,6 +220,7 @@ window.__erpRecorderInjected = true;
 
   function clearAll() {
     steps = []; pendingSelect = null;
+    viewMode = false;
     recordedErrors.clear();
     recordedReadonly.clear();
     setBarState(); persist();
@@ -303,8 +332,9 @@ window.__erpRecorderInjected = true;
   // Called after each recorded step so fields that were auto-populated by
   // earlier actions (e.g. a disabled dropdown whose value came from a
   // preceding selection) are captured even if the user never clicked them.
+  // Skipped in view mode — only explicit clicks or Cap All should capture there.
   function scanReadonlyFields() {
-    if (!recording || readonlyScanning) return;
+    if (!recording || readonlyScanning || viewMode) return;
     readonlyScanning = true;
     try {
       const ffs = document.querySelectorAll(
@@ -443,10 +473,7 @@ window.__erpRecorderInjected = true;
         ((selCls.includes('mat-mdc-select') || selCls.includes('mat-select')) && isFieldDisabled);
       if (isSelDisabled) {
         const lbl = ff.querySelector('mat-label')?.textContent.trim();
-        const selVal = (
-          ff.querySelector('.mat-mdc-select-value-text, .mat-mdc-select-min-line, .mat-select-min-line')
-            ?.textContent || matSel.getAttribute('aria-valuetext') || ''
-        ).trim();
+        const selVal = _readMatSelectText(ff, matSel);
         if (lbl && selVal) {
           return { label: lbl, value: selVal, isSelect: true, rowIndex: rowIndexOf(ff) };
         }
@@ -460,7 +487,7 @@ window.__erpRecorderInjected = true;
     );
     if (inp) {
       const lbl = ff.querySelector('mat-label')?.textContent.trim();
-      const val = (inp.value || inp.getAttribute('value') || '').trim();
+      const val = _readInputValue(inp);
       if (lbl && val) {
         return { label: lbl, value: val, isSelect: false, rowIndex: rowIndexOf(ff) };
       }
@@ -479,18 +506,176 @@ window.__erpRecorderInjected = true;
     // mat-form-field disabled class + any element with a value
     if (isFieldDisabled) {
       const lbl = ff.querySelector('mat-label')?.textContent.trim();
-      const selVal = (
-        ff.querySelector('.mat-mdc-select-value-text, .mat-mdc-select-min-line, .mat-select-min-line')
-          ?.textContent
-      )?.trim();
+      const ms = ff.querySelector('mat-select');
+      const selVal = ms ? _readMatSelectText(ff, ms) : null;
       const visInp = ff.querySelector('input:not([type="hidden"]), textarea');
-      const val = selVal || visInp?.value || '';
+      const val = selVal || (visInp ? _readInputValue(visInp) : '') || '';
       if (lbl && val) {
         return { label: lbl, value: val, isSelect: !!selVal };
       }
     }
 
     return null;
+  }
+
+  // ── View-mode helpers ─────────────────────────────────────────────
+
+  // Read the current value of ANY mat-form-field regardless of disabled state.
+  // Used in view mode where fields look readonly but lack Angular disabled markers.
+  function getAnyFieldValue(ff) {
+    if (!ff || typeof ff.querySelector !== 'function') return null;
+    const lbl = ff.querySelector('mat-label')?.textContent.trim();
+    if (!lbl) return null;
+
+    const matSel = ff.querySelector('mat-select');
+    if (matSel) {
+      const selVal = _readMatSelectText(ff, matSel);
+      if (selVal) return { label: lbl, value: selVal, isSelect: true, rowIndex: rowIndexOf(ff) };
+      return null;
+    }
+
+    const inp = ff.querySelector('input:not([type="hidden"]), textarea');
+    if (inp) {
+      const val = _readInputValue(inp);
+      if (val) return { label: lbl, value: val, isSelect: false, rowIndex: rowIndexOf(ff) };
+    }
+
+    return null;
+  }
+
+  // Read the current value from any input/textarea, handling Angular quirks:
+  //  - type="number" disabled inputs: Angular's NumberValueAccessor can leave
+  //    inp.value="" even though the field shows a number; try valueAsNumber and
+  //    the native prototype getter as fallbacks.
+  //  - defaultValue covers the HTML `value` attribute (used by some bindings).
+  function _readInputValue(inp) {
+    if (!inp) return '';
+
+    // 1. Standard value property
+    let v = (inp.value || '').trim();
+    if (v) return v;
+
+    // 2. type=number: valueAsNumber holds the numeric value even when .value
+    //    returns '' (e.g. Angular sets inp.value but browser sanitises it away
+    //    for very large integers represented as exponential notation).
+    if (inp.type === 'number') {
+      const n = inp.valueAsNumber;
+      if (!isNaN(n) && isFinite(n)) return String(n);
+    }
+
+    // 3. defaultValue reflects the HTML `value` attribute
+    v = (inp.defaultValue || '').trim();
+    if (v) return v;
+
+    // 4. Native prototype getter — bypasses any Angular property-descriptor
+    //    shim that may shadow the real underlying DOM value string.
+    try {
+      const proto = Object.getOwnPropertyDescriptor(
+        inp.tagName === 'TEXTAREA'
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype,
+        'value'
+      );
+      if (proto?.get) {
+        v = (proto.get.call(inp) || '').trim();
+        if (v) return v;
+      }
+    } catch (_) {}
+
+    // 5. Angular Ivy __ngContext__: for disabled/readonly number inputs
+    //    (e.g. Total PO Amount) Angular stores the value only in the component
+    //    instance held in the nearest _nghost ancestor's LView at index [6].
+    //    Walk up to the first component host element and probe common value
+    //    property names on the component instance.
+    try {
+      let node = inp.parentElement;
+      while (node && node !== document.body) {
+        const attrs = node.getAttributeNames ? node.getAttributeNames() : [];
+        if (attrs.some(a => a.startsWith('_nghost-'))) {
+          const lv = node.__ngContext__;
+          if (Array.isArray(lv)) {
+            // LView[6] = component instance ("this" of the component class)
+            const comp = lv[6];
+            if (comp && typeof comp === 'object') {
+              for (const k of ['value', '_value', 'model', 'numericValue', 'fieldValue']) {
+                const cv = comp[k];
+                if (cv != null && cv !== '' &&
+                    typeof cv !== 'object' && typeof cv !== 'function') {
+                  return String(cv);
+                }
+              }
+            }
+          }
+          break; // only try the immediate component host
+        }
+        node = node.parentElement;
+      }
+    } catch (_) {}
+
+    return '';
+  }
+
+  // Extract the displayed text from a mat-select, trying all known DOM slots
+  // across Material v14/v15/v16 and handling nested span structures.
+  // Returns null for placeholder text (starts with "Select ") — those are not values.
+  function _readMatSelectText(ff, matSel) {
+    const isPlaceholder = t => !t || /^select\s/i.test(t);
+
+    // 1. Custom trigger template: ERP View forms often bind display text here
+    //    instead of via the Angular form value (so standard value slots are empty).
+    const trigger = matSel.querySelector('mat-select-trigger');
+    if (trigger) {
+      const t = (trigger.innerText || trigger.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t && !isPlaceholder(t)) return t;
+    }
+
+    // 2. Standard Angular Material value slots (set when form value is bound)
+    const SLOTS = [
+      '.mat-mdc-select-min-line',
+      '.mat-select-min-line',
+      '.mat-mdc-select-value-text',
+      '.mat-select-value-text',
+    ];
+    for (const sel of SLOTS) {
+      const el = ff.querySelector(sel);
+      if (!el) continue;
+      // Walk to the deepest single child to avoid reading parent+child duplicated text
+      let node = el;
+      while (node.children.length === 1) node = node.children[0];
+      const t = (node.textContent || '').trim();
+      if (t && !isPlaceholder(t)) return t;
+    }
+
+    // 3. aria-valuetext fallback (set by Angular when value is selected)
+    const aria = (matSel.getAttribute('aria-valuetext') || '').trim();
+    if (aria && !isPlaceholder(aria)) return aria;
+    return null;
+  }
+
+  function enterViewMode() {
+    viewMode = true;
+    recordedReadonly.clear(); // fresh dedup scope for this view form
+    setBarState();
+  }
+
+  function exitViewMode() {
+    if (!viewMode) return;
+    viewMode = false;
+    setBarState();
+  }
+
+  // Capture All: scan every mat-form-field on the page and record each value.
+  // Grouped under lastAction (the "View" step) via recordReadonly(ro, true).
+  function captureAllViewFields() {
+    const ffs = document.querySelectorAll('mat-form-field');
+    let captured = 0;
+    for (const ff of ffs) {
+      if (!ff.isConnected) continue;
+      // Try readonly first (more specific), then fall back to any-value reader
+      const ro = getReadonlyField(ff) || getAnyFieldValue(ff);
+      if (ro) { recordReadonly(ro, true); captured++; }
+    }
+    console.log(`[ERP Recorder] Capture All: ${captured} fields captured`);
   }
 
   // ── mat-select recording ──────────────────────────────────────────
@@ -588,12 +773,45 @@ window.__erpRecorderInjected = true;
   document.addEventListener('mousedown', onOptionEvent, true);
   document.addEventListener('click', onOptionEvent, true);
 
+  // In view mode: find the mat-form-field nearest to a click, even when
+  // `pointer-events:none` on disabled fields causes e.target to land on a
+  // parent/sibling element rather than the field itself.
+  function _ffFromEvent(e) {
+    // Direct ancestor first (works when events reach the field)
+    const direct = e.target.closest?.('mat-form-field');
+    if (direct) return direct;
+    // elementFromPoint with pointer-events temporarily forced (skip for view mode
+    // where we just want the nearest field in the visual vicinity)
+    if (typeof e.clientX === 'number') {
+      // Expand search: check all mat-form-fields and find the one whose bounding
+      // rect contains the click point (handles pointer-events:none on internals)
+      const ffs = document.querySelectorAll('mat-form-field');
+      for (const ff of ffs) {
+        const r = ff.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right &&
+            e.clientY >= r.top  && e.clientY <= r.bottom) {
+          return ff;
+        }
+      }
+    }
+    return null;
+  }
+
   // mat-select trigger detection (all interaction routes → set pendingSelect)
   document.addEventListener('mousedown', e => {
     if (!recording || inBar(e.target)) return;
 
-    // Readonly field detection first (so a disabled dropdown is recorded
-    // as readonly instead of opening a panel)
+    // In view mode: use the robust point-in-rect finder; capture the field value
+    if (viewMode) {
+      const ff = _ffFromEvent(e);
+      if (ff) {
+        const ro = getReadonlyField(ff) || getAnyFieldValue(ff);
+        if (ro) { recordReadonly(ro, true); }
+      }
+      return; // never open panels in view mode
+    }
+
+    // Normal mode below
     const ff = e.target.closest('mat-form-field');
     if (ff) {
       const ro = getReadonlyField(ff);
@@ -715,6 +933,10 @@ window.__erpRecorderInjected = true;
     if (btn.querySelector('.erp-menu-title')) {
       // Edit / View / History / … from the action menu (suite: :has(.erp-menu-title:text-is('…')))
       const title = btn.querySelector('.erp-menu-title').textContent.trim().replace(/'/g, "\\'");
+      if (title === 'View') {
+        // Opening a View form → enter view mode after the form renders
+        setTimeout(enterViewMode, 600);
+      }
       return {
         label: title,
         code: `page.locator(".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('${title}'))").click()`
@@ -732,6 +954,8 @@ window.__erpRecorderInjected = true;
     if (footer) {
       if (footer.classList.contains('popup-footer') || footer.classList.contains('form-footer')) {
         const cls2 = footer.classList.contains('popup-footer') ? 'popup-footer' : 'form-footer';
+        // Closing/cancelling a popup exits view mode
+        if (/close|cancel/i.test(text)) exitViewMode();
         return {
           label: text,
           code: `page.locator("xpath=//div[contains(@class,'${cls2}')]//button[contains(.,'${text}')]").click()`
@@ -756,6 +980,13 @@ window.__erpRecorderInjected = true;
     if (!btn) return;
     if (!isFlowButton(btn)) return;
     const b = buttonCode(btn);
+    // Exit view mode on any dismiss gesture: close icon, Cancel, Close buttons
+    // regardless of which container they live in (popup-footer already handled
+    // above in buttonCode, but full-page views use a standalone close icon that
+    // falls to the get_by_role fallback with label "close").
+    if (viewMode && /^(close|cancel)$/i.test(b.label)) {
+      exitViewMode();
+    }
     addStep({ type: 'button', label: b.label, value: b.label, code: b.code });
   }
 
@@ -764,6 +995,14 @@ window.__erpRecorderInjected = true;
   document.addEventListener('focusin', e => {
     if (!recording) return;
     if (inBar(e.target)) return;
+    if (viewMode) {
+      const ff = e.target.closest?.('mat-form-field');
+      if (ff) {
+        const ro = getReadonlyField(ff) || getAnyFieldValue(ff);
+        if (ro) { recordReadonly(ro, true); }
+      }
+      return;
+    }
     const ff = e.target.closest?.('mat-form-field');
     if (ff) {
       const ro = getReadonlyField(ff);
@@ -870,6 +1109,7 @@ window.__erpRecorderInjected = true;
         const tag = node.tagName?.toLowerCase();
         if (tag === 'mat-dialog-container' || node.querySelector?.('mat-dialog-container')) {
           suppressInputsFor(600);
+          exitViewMode(); // closing any dialog exits view mode
           addStep({
             type: 'dialog-close',
             label: 'Dialog closed',
@@ -928,6 +1168,7 @@ window.__erpRecorderInjected = true;
     if (location.href === prev) return;
     suppressInputsFor(800);
     pendingSelect = null;
+    exitViewMode(); // navigating away always exits view mode
     recordedErrors.clear();
     recordedReadonly.clear(); // new page → readonly values must be re-asserted
     addStep({
