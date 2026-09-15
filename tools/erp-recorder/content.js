@@ -27,6 +27,11 @@ window.__erpRecorderInjected = true;
   // View-mode flag: set when user opens a View form; cleared on dialog-close / nav
   let viewMode = false;
 
+  // Fields the user clicked in view mode but where _readInputValue returned ''
+  // (Angular hadn't finished binding the value yet). Retried in exitViewMode()
+  // when the DOM is still live and Angular has definitely settled.
+  const pendingViewCaptures = new Set();
+
   // Red-line validation error messages already recorded (mat-error / red-line)
   const recordedErrors = new Set();
 
@@ -223,6 +228,7 @@ window.__erpRecorderInjected = true;
     viewMode = false;
     recordedErrors.clear();
     recordedReadonly.clear();
+    pendingViewCaptures.clear();
     setBarState(); persist();
     try { chrome.runtime.sendMessage({ type: 'STATE', recording, steps }); } catch (_) {}
   }
@@ -654,12 +660,23 @@ window.__erpRecorderInjected = true;
 
   function enterViewMode() {
     viewMode = true;
-    recordedReadonly.clear(); // fresh dedup scope for this view form
+    recordedReadonly.clear();
+    pendingViewCaptures.clear();
     setBarState();
   }
 
   function exitViewMode() {
     if (!viewMode) return;
+    // Last-chance retry: fields the user clicked but Angular hadn't bound yet.
+    // The close button fires before Angular tears down the DOM, so fields are
+    // still live and __ngContext__[6].value is now populated.
+    for (const ff of pendingViewCaptures) {
+      if (ff.isConnected) {
+        const ro = getReadonlyField(ff) || getAnyFieldValue(ff);
+        if (ro) recordReadonly(ro, true);
+      }
+    }
+    pendingViewCaptures.clear();
     viewMode = false;
     setBarState();
   }
@@ -801,12 +818,26 @@ window.__erpRecorderInjected = true;
   document.addEventListener('mousedown', e => {
     if (!recording || inBar(e.target)) return;
 
-    // In view mode: use the robust point-in-rect finder; capture the field value
+    // In view mode: capture clicked fields and flush pending captures on close.
     if (viewMode) {
+      // Detect close/cancel in mousedown — fires BEFORE Angular's click handler
+      // tears down the view DOM. exitViewMode() retries pendingViewCaptures
+      // while all fields are still live and __ngContext__[6].value is populated.
+      const btn = e.target.closest('button, [role="button"]');
+      if (btn) {
+        const lbl = (
+          btn.getAttribute('aria-label') || btn.textContent || ''
+        ).trim().toLowerCase();
+        if (/\b(close|cancel)\b/.test(lbl)) {
+          exitViewMode(); // flushes pendingViewCaptures now, before DOM teardown
+        }
+      }
+
       const ff = _ffFromEvent(e);
       if (ff) {
+        pendingViewCaptures.add(ff);
         const ro = getReadonlyField(ff) || getAnyFieldValue(ff);
-        if (ro) { recordReadonly(ro, true); }
+        if (ro) recordReadonly(ro, true);
       }
       return; // never open panels in view mode
     }
