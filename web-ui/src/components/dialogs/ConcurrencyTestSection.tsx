@@ -2,9 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { AlertTriangle, Play, Loader2, Key, X, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { AlertTriangle, Play, Loader2, Key, X, CheckCircle2, XCircle, Info, ChevronDown, ChevronUp } from 'lucide-react'
 import { startPbConcurrencyTest, type SSEEvent } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
 
@@ -18,307 +16,464 @@ interface Props {
 const KNOWN_TENANTS = [
   { id: '795', name: 'Jalpan Builders' },
   { id: '666', name: 'Jay Kisan Ltd' },
-  { id: '686', name: 'Agristack Company' },
+  { id: '686', name: 'Agristack Co.' },
   { id: '751', name: 'Tech Neo' },
   { id: '895', name: 'Janardhan FPC' },
 ]
 
-type PbStatus = 'waiting' | 'created' | 'rejected' | 'error'
+const ACCOUNTING_STEPS = [
+  { key: 'INPUT_VALIDATION',                 label: 'Validation',      short: 'VAL' },
+  { key: 'FISCAL_YEAR_CHECK',                label: 'Fiscal Year',     short: 'FY'  },
+  { key: 'INVENTORY_RESERVATION',            label: 'Inventory',       short: 'INV' },
+  { key: 'PURCHASE_BOOKING_ACCOUNTING_POST', label: 'PB Ledger',       short: 'PB'  },
+  { key: 'INVENTORY_ACCOUNTING_POST',        label: 'Inv. Ledger',     short: 'IL'  },
+  { key: 'COMPLETED',                        label: 'Complete',        short: 'OK'  },
+]
 
-interface PbLog { text: string; ts: Date; isErr: boolean }
-interface PbState { status: PbStatus; logs: PbLog[] }
+type PbStatus = 'idle' | 'waiting' | 'created' | 'rejected' | 'error'
 
-function formatTime(d: Date) {
-  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+interface PbState {
+  status: PbStatus
+  pbId?: string
+  pbRef?: string
+  completedSteps: Set<string>
+  failedStep?: string
+  failedMsg?: string
 }
 
-function isValidToken(raw: string) {
-  const t = raw.startsWith('Bearer ') ? raw.slice(7) : raw
-  return t.startsWith('eyJ') && t.split('.').length === 3 && t.length > 100
-}
-
-// Extract "PB [N]" index from a log line. Returns 0-based index or -1 if not a PB line.
 function parsePbIndex(text: string): number {
   const m = text.match(/PB \[(\d+)\]/)
   return m ? parseInt(m[1]) - 1 : -1
 }
 
-function gridCols(n: number) {
-  if (n === 2) return 'grid-cols-2'
-  if (n === 3) return 'grid-cols-3'
+function parseCreated(text: string) {
+  const m = text.match(/id=(\S+)\s+ref=(\S+)/)
+  return m ? { id: m[1], ref: m[2] } : {}
+}
+
+function parseStep(text: string) {
+  // Matches [STEP_KEY_WITH_UNDERSCORES] STATUS: optional message
+  const m = text.match(/\[([A-Z_]{4,})\] ([A-Z]+)(?:: (.+))?$/)
+  return m ? { step: m[1], evStatus: m[2], msg: m[3] } : {}
+}
+
+function gridClass(n: number) {
+  if (n <= 3) return `grid-cols-${n}`
   if (n === 4) return 'grid-cols-2'
   if (n <= 6)  return 'grid-cols-3'
   return 'grid-cols-4'
 }
 
+// ── Step dot component ─────────────────────────────────────────────────────────
+function StepNode({
+  done, failed, active, isLast,
+}: { done: boolean; failed: boolean; active: boolean; isLast: boolean }) {
+  return (
+    <div className="flex flex-col items-center" style={{ width: 18 }}>
+      <div className={`
+        relative size-[18px] rounded-full border-2 flex items-center justify-center shrink-0
+        transition-all duration-400
+        ${done   ? 'bg-emerald-500 border-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
+          failed ? 'bg-red-500 border-red-500' :
+          active ? 'border-[#6366F1] bg-[#6366F1]/10' :
+                   'border-gray-600 bg-transparent'}
+      `}>
+        {done   && <svg viewBox="0 0 12 12" fill="none" className="size-2.5"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        {failed && <svg viewBox="0 0 12 12" fill="none" className="size-2.5"><path d="M2 2l8 8M10 2l-8 8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+        {active && !done && !failed && (
+          <span className="absolute inset-0 rounded-full border-2 border-[#6366F1] animate-ping opacity-60" />
+        )}
+      </div>
+      {!isLast && (
+        <div
+          className="w-px flex-1 mt-0.5 transition-colors duration-500"
+          style={{ minHeight: 20, background: done ? '#22C55E' : 'rgb(55,65,81)' }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Per-PB panel ───────────────────────────────────────────────────────────────
 function PbPanel({ idx, state, running }: { idx: number; state: PbState; running: boolean }) {
-  const logsEndRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [state.logs])
+  const firstPendingIdx = ACCOUNTING_STEPS.findIndex(s =>
+    !state.completedSteps.has(s.key) && state.failedStep !== s.key
+  )
 
-  const statusIcon =
-    state.status === 'created'  ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" /> :
-    state.status === 'rejected' ? <XCircle      className="size-4 text-amber-500 shrink-0" /> :
-    state.status === 'error'    ? <XCircle      className="size-4 text-red-500 shrink-0" /> :
-    running                     ? <Loader2      className="size-4 text-[#3F51B5] animate-spin shrink-0" /> :
-                                  <Clock        className="size-4 text-gray-400 shrink-0" />
-
-  const statusText =
-    state.status === 'created'  ? 'CREATED' :
-    state.status === 'rejected' ? 'REJECTED' :
-    state.status === 'error'    ? 'ERROR' :
-    running                     ? 'waiting…' : 'idle'
+  const borderColor =
+    state.status === 'created'  ? 'border-emerald-500/40' :
+    state.status === 'rejected' ? 'border-amber-500/40' :
+    state.status === 'error'    ? 'border-red-500/40' :
+    running                     ? 'border-[#6366F1]/30' :
+                                  'border-gray-700/60'
 
   const headerBg =
-    state.status === 'created'  ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700' :
-    state.status === 'rejected' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
-    state.status === 'error'    ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' :
-    'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+    state.status === 'created'  ? 'bg-emerald-500/8' :
+    state.status === 'rejected' ? 'bg-amber-500/8' :
+    state.status === 'error'    ? 'bg-red-500/8' :
+    running                     ? 'bg-[#6366F1]/5' :
+                                  'bg-gray-800/40'
 
   return (
-    <div className="flex flex-col border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden min-h-[220px]">
-      {/* Panel header */}
-      <div className={`flex items-center gap-2 px-3 py-2 border-b ${headerBg} shrink-0`}>
-        {statusIcon}
-        <span className="text-[12px] font-semibold text-gray-800 dark:text-gray-100">PB {idx + 1}</span>
-        <span className={`text-[11px] font-medium ml-auto ${
-          state.status === 'created'  ? 'text-emerald-600 dark:text-emerald-400' :
-          state.status === 'rejected' ? 'text-amber-600 dark:text-amber-400' :
-          state.status === 'error'    ? 'text-red-600 dark:text-red-400' :
-          'text-gray-500 dark:text-gray-400'
-        }`}>{statusText}</span>
+    <div className={`flex flex-col rounded-xl border ${borderColor} bg-gray-900/80 overflow-hidden transition-colors duration-300`}>
+
+      {/* Header */}
+      <div className={`${headerBg} px-4 py-2.5 flex items-center justify-between border-b border-white/5`}>
+        <div className="flex items-center gap-2">
+          {state.status === 'created'  && <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />}
+          {(state.status === 'rejected' || state.status === 'error') && <XCircle className="size-3.5 text-red-400 shrink-0" />}
+          {(state.status === 'waiting' || state.status === 'idle') && running &&
+            <Loader2 className="size-3.5 text-[#6366F1] animate-spin shrink-0" />}
+          {(state.status === 'waiting' || state.status === 'idle') && !running &&
+            <div className="size-3.5 rounded-full border border-gray-600 shrink-0" />}
+          <span className="text-[13px] font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-jb, "JetBrains Mono", monospace)' }}>
+            PB {idx + 1}
+          </span>
+        </div>
+
+        <span className={`
+          text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded
+          ${state.status === 'created'  ? 'bg-emerald-500/15 text-emerald-400' :
+            state.status === 'rejected' ? 'bg-amber-500/15 text-amber-400' :
+            state.status === 'error'    ? 'bg-red-500/15 text-red-400' :
+            running                     ? 'bg-[#6366F1]/15 text-[#6366F1]' :
+                                          'bg-gray-700/50 text-gray-500'}
+        `}>
+          {state.status === 'created'  ? 'Created' :
+           state.status === 'rejected' ? 'Rejected' :
+           state.status === 'error'    ? 'Error' :
+           running                     ? 'Firing' : 'Idle'}
+        </span>
       </div>
 
-      {/* Log lines */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-0.5 font-mono bg-white dark:bg-gray-900">
-        {state.logs.length === 0 && running && (
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 italic px-1 pt-1">Waiting for thread to start…</div>
-        )}
-        {state.logs.map((log, i) => (
-          <div key={i} className={`flex gap-1.5 items-start text-[10px] ${log.isErr ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
-            <span className="text-gray-400 dark:text-gray-500 shrink-0">[{formatTime(log.ts)}]</span>
-            <span className="whitespace-pre-wrap break-all">{log.text}</span>
-          </div>
-        ))}
-        <div ref={logsEndRef} />
+      {/* PB ID */}
+      {state.pbId && (
+        <div className="px-4 py-2 bg-gray-800/30 border-b border-white/5 flex items-center gap-2">
+          <span className="text-[9px] uppercase tracking-widest text-gray-500">id</span>
+          <span className="font-mono text-[11px] text-gray-200">{state.pbId}</span>
+          {state.pbRef && state.pbRef !== state.pbId && (
+            <>
+              <span className="text-gray-700">·</span>
+              <span className="text-[9px] uppercase tracking-widest text-gray-500">ref</span>
+              <span className="font-mono text-[11px] text-gray-200">{state.pbRef}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Step pipeline */}
+      <div className="flex-1 px-4 py-3">
+        {ACCOUNTING_STEPS.map((s, i) => {
+          const done   = state.completedSteps.has(s.key)
+          const failed = state.failedStep === s.key
+          const active = !done && !failed && running && i === firstPendingIdx
+          const isLast = i === ACCOUNTING_STEPS.length - 1
+
+          return (
+            <div key={s.key} className="flex items-start gap-3" style={{ minHeight: isLast ? 18 : 38 }}>
+              <StepNode done={done} failed={failed} active={active} isLast={isLast} />
+              <div className="flex-1 pt-px">
+                <span className={`
+                  text-[11px] font-medium transition-colors duration-300
+                  ${done   ? 'text-emerald-400' :
+                    failed ? 'text-red-400' :
+                    active ? 'text-[#818CF8]' :
+                             'text-gray-600'}
+                `}>{s.label}</span>
+                {failed && state.failedMsg && (
+                  <p className="text-[10px] text-red-400/80 mt-0.5 leading-tight">{state.failedMsg}</p>
+                )}
+              </div>
+              {done && (
+                <span className="text-[10px] text-emerald-500/70 pt-px font-mono shrink-0">✓</span>
+              )}
+              {active && running && (
+                <Loader2 className="size-2.5 text-[#6366F1] animate-spin mt-1 shrink-0" />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
+// ── Chain doc pills ────────────────────────────────────────────────────────────
+function ChainDocs({ text }: { text: string }) {
+  const docs: { label: string; ref: string }[] = []
+  for (const [label, re] of [['PO', /PO=(\S+)/], ['GRN', /GRN=(\S+)/], ['QC', /QC=(\S+)/]] as [string, RegExp][]) {
+    const m = text.match(re)
+    if (m) docs.push({ label, ref: m[1] })
+  }
+  if (!docs.length) return null
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {docs.map(({ label, ref }, i) => (
+        <React.Fragment key={label}>
+          {i > 0 && <span className="text-gray-600 text-[9px]">→</span>}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-800 text-[10px]">
+            <span className="text-gray-500 font-bold uppercase tracking-wide text-[8px]">{label}</span>
+            <span className="font-mono text-gray-300">{ref.split('/').pop()}</span>
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export function ConcurrencyTestSection({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
   const { token, tenantId, localToken, setLocalToken, localTenantId, setLocalTenantId, handleAuthError } = useErpToken(erpToken, erpTenantId)
   const [parallelCount, setParallelCount] = useState(3)
   const [running, setRunning]   = useState(false)
-  const [showTokenInput, setShowTokenInput] = useState(!erpToken)
-  const [generalLogs, setGeneralLogs] = useState<{ text: string; ts: Date; isErr: boolean }[]>([])
-  const [pbStates, setPbStates]   = useState<PbState[]>([])
+  const [showTokenInput, setShowTokenInput] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
+  const [chainPhase, setChainPhase] = useState<'idle' | 'building' | 'ready'>('idle')
+  const [chainDoneText, setChainDoneText] = useState('')
+  const [pbStates, setPbStates] = useState<PbState[]>([])
   const [duplicateDetected, setDuplicateDetected] = useState<boolean | null>(null)
+  const [createdCount, setCreatedCount] = useState(0)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
-  const generalEndRef   = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    generalEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [generalLogs])
-
-  useEffect(() => {
-    if (showTokenInput) tokenSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (showTokenInput) tokenSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [showTokenInput])
 
   const handleRun = useCallback(() => {
     if (!token) { setShowTokenInput(true); return }
-
     const n = parallelCount
     setRunning(true)
-    setGeneralLogs([])
+    setChainPhase('building')
+    setChainDoneText('')
     setDuplicateDetected(null)
-    setPbStates(Array.from({ length: n }, () => ({ status: 'waiting' as PbStatus, logs: [] })))
+    setCreatedCount(0)
+    setPbStates(Array.from({ length: n }, () => ({ status: 'waiting' as PbStatus, completedSteps: new Set<string>() })))
 
     startPbConcurrencyTest(
-      token,
-      tenantId || '681',
-      n,
+      token, tenantId || '681', n,
       (event: SSEEvent) => {
-        const ts   = new Date()
         const text = event.message
-        const isErr = event.type === 'error'
 
         if (event.type === 'run_end') {
           setRunning(false)
           setDuplicateDetected((event.created ?? 0) > 1)
-          setGeneralLogs(prev => [...prev, { text, ts, isErr: false }])
+          setCreatedCount(event.created ?? 0)
           return
         }
 
         const pbIdx = parsePbIndex(text)
 
         if (pbIdx >= 0 && pbIdx < n) {
-          // Route to the right PB panel
-          setPbStates(prev => {
-            const next = prev.map((s, i) => i !== pbIdx ? s : { ...s, logs: [...s.logs, { text: text.trim(), ts, isErr }] })
-            // Update panel status from the headline line
-            if (/PB \[\d+\] CREATED/.test(text))  next[pbIdx] = { ...next[pbIdx], status: 'created' }
-            if (/PB \[\d+\] REJECTED/.test(text)) next[pbIdx] = { ...next[pbIdx], status: 'rejected' }
-            if (/PB \[\d+\] ERROR/.test(text))    next[pbIdx] = { ...next[pbIdx], status: 'error' }
-            return next
-          })
+          setPbStates(prev => prev.map((s, i) => {
+            if (i !== pbIdx) return s
+            const updated: PbState = { ...s, completedSteps: new Set(s.completedSteps) }
+
+            if (/PB \[\d+\] CREATED/.test(text)) {
+              const { id, ref } = parseCreated(text)
+              updated.status = 'created'
+              updated.pbId = id
+              updated.pbRef = ref
+            } else if (/PB \[\d+\] REJECTED/.test(text)) {
+              updated.status = 'rejected'
+            } else if (/PB \[\d+\] ERROR/.test(text)) {
+              updated.status = 'error'
+            } else {
+              const { step, evStatus, msg } = parseStep(text)
+              if (step && (evStatus === 'SUCCESS' || evStatus === 'COMPLETED')) {
+                updated.completedSteps.add(step)
+              } else if (step && evStatus === 'FAILED') {
+                updated.failedStep = step
+                updated.failedMsg = msg
+                updated.status = 'error'
+              }
+            }
+            return updated
+          }))
         } else {
-          // General line (Step 1, payload, threads finished, etc.)
-          setGeneralLogs(prev => [...prev, { text, ts, isErr }])
+          if (text.includes('Step 1 done')) {
+            setChainPhase('ready')
+            setChainDoneText(text)
+          }
         }
       },
       () => setRunning(false),
       (err) => {
         if (!handleAuthError(err)) {
-          setGeneralLogs(prev => [...prev, { text: `Error: ${err.message}`, ts: new Date(), isErr: true }])
+          setChainPhase('idle')
         }
         setRunning(false)
       },
     )
   }, [token, tenantId, parallelCount, handleAuthError])
 
-  const tokenValid   = isValidToken(localToken)
-  const tokenEntered = localToken.length > 0
+  const tokenValid = (() => {
+    const t = localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken
+    return t.startsWith('eyJ') && t.split('.').length === 3 && t.length > 100
+  })()
+
+  const hasRun = pbStates.length > 0
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-3 overflow-y-auto">
+    <div className="flex flex-col h-full min-h-0 gap-3" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
 
-      {/* ── Config card ─────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex flex-col gap-3 shrink-0">
-
-        {/* Description */}
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-[11px] text-amber-700 dark:text-amber-300 space-y-1">
-          <p className="font-semibold">What this does</p>
-          <p>Runs <span className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">PO → GP → GRN → QC</span> once, then fires <strong>N identical PB payloads simultaneously</strong> against the same QC/GRN/PO. Each PB gets its own live panel below.</p>
-        </div>
-
-        {/* Token status */}
+      {/* ── Config bar ──────────────────────────────────────────────────────── */}
+      <div className="bg-gray-900 border border-gray-700/60 rounded-xl p-3 flex flex-col gap-0 shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
+
+          {/* Token */}
           {token ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-block size-2 rounded-full bg-green-500" />
-              <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">Token active</span>
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">· tenant {tenantId || '(none)'}</span>
-              <button type="button" onClick={() => setShowTokenInput(v => !v)} className="ml-1 text-[10px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline cursor-pointer">change</button>
-              <button type="button" onClick={() => { setLocalToken(''); setLocalTenantId(''); onClearToken() }} className="text-[10px] text-red-500 hover:text-red-700 underline cursor-pointer">clear</button>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="size-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <span className="text-[11px] text-gray-400 font-mono">{tenantId || '—'}</span>
+              <button type="button" onClick={() => setShowTokenInput(v => !v)} className="text-[10px] text-[#818CF8] hover:text-[#6366F1] cursor-pointer transition-colors">change</button>
+              <button type="button" onClick={() => { setLocalToken(''); setLocalTenantId(''); onClearToken() }} className="text-[10px] text-red-500/70 hover:text-red-400 cursor-pointer transition-colors">clear</button>
             </div>
           ) : (
-            <button type="button" onClick={() => setShowTokenInput(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-[12px] font-medium border border-orange-300 dark:border-orange-700 hover:bg-orange-200 cursor-pointer">
-              <Key className="size-3.5" />Set ERP Token
+            <button type="button" onClick={() => setShowTokenInput(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-orange-500/10 text-orange-400 text-[11px] font-medium border border-orange-500/20 hover:bg-orange-500/15 cursor-pointer transition-colors">
+              <Key className="size-3" />Token
             </button>
           )}
+
+          <div className="h-3 w-px bg-gray-700 shrink-0" />
+
+          {/* Count stepper */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500">Parallel</span>
+            <div className="flex items-center gap-0 rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
+              <button type="button" disabled={running || parallelCount <= 2} onClick={() => setParallelCount(v => Math.max(2, v - 1))}
+                className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-30 cursor-pointer transition-colors text-[14px]">−</button>
+              <span className="w-7 text-center text-[13px] font-bold text-white" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{parallelCount}</span>
+              <button type="button" disabled={running || parallelCount >= 10} onClick={() => setParallelCount(v => Math.min(10, v + 1))}
+                className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-30 cursor-pointer transition-colors text-[14px]">+</button>
+            </div>
+          </div>
+
+          {/* Run */}
+          <button
+            type="button"
+            onClick={handleRun}
+            disabled={running || !token}
+            className="flex items-center gap-1.5 h-8 px-4 rounded-lg text-[12px] font-semibold text-white cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: running ? '#4B4FCB' : 'linear-gradient(135deg, #6366F1 0%, #818CF8 100%)', boxShadow: running ? 'none' : '0 0 16px rgba(99,102,241,0.3)' }}
+          >
+            {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5 fill-white" />}
+            {running ? 'Running…' : 'Run Test'}
+          </button>
+
+          <button type="button" onClick={() => setShowInfo(v => !v)} className="ml-auto text-gray-600 hover:text-gray-400 cursor-pointer transition-colors">
+            <Info className="size-3.5" />
+          </button>
         </div>
 
-        {/* Inline token panel */}
+        {/* Info */}
+        {showInfo && (
+          <div className="text-[11px] text-gray-500 leading-relaxed mt-3 pt-3 border-t border-gray-800">
+            Runs <span className="font-mono text-gray-300">PO → GP → GRN → QC</span> once, then fires N identical PB payloads simultaneously against the same document IDs.
+            Each panel shows its thread's accounting pipeline in real time. If more than 1 PB is created, the ERP has no duplicate protection at the booking level.
+          </div>
+        )}
+
+        {/* Token input */}
         {showTokenInput && (
-          <div ref={tokenSectionRef} className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg space-y-2">
+          <div ref={tokenSectionRef} className="mt-3 pt-3 border-t border-gray-800 space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[11px] text-orange-600 dark:text-orange-400 font-medium">ERP Credentials</Label>
-              <button type="button" onClick={() => setShowTokenInput(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X className="size-3.5" /></button>
+              <span className="text-[10px] uppercase tracking-widest text-orange-500/80 font-semibold">ERP Token</span>
+              <button type="button" onClick={() => setShowTokenInput(false)} className="text-gray-600 hover:text-gray-400 cursor-pointer"><X className="size-3.5" /></button>
             </div>
-            <Input
+            <input
               type="text"
               value={localToken}
               onChange={e => setLocalToken(e.target.value)}
-              placeholder="Paste your Bearer token (eyJ…)"
+              placeholder="Paste Bearer token (eyJ…)"
               autoComplete="off"
-              style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
-              className={`h-9 text-[12px] ${tokenEntered ? (tokenValid ? 'border-green-400' : 'border-red-400') : ''}`}
+              style={{ WebkitTextSecurity: 'disc', fontFamily: 'JetBrains Mono, monospace' } as React.CSSProperties}
+              className={`w-full h-8 px-3 rounded-lg border text-[11px] bg-gray-800 text-gray-200 outline-none transition-colors
+                ${localToken ? (tokenValid ? 'border-emerald-500/60' : 'border-red-500/50') : 'border-gray-700'}
+                focus:border-[#6366F1]/60`}
             />
-            {tokenEntered && !tokenValid && (
-              <div className="rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2 space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle className="size-3 text-red-500 shrink-0" />
-                  <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">Token format looks incorrect — must start with eyJ…</span>
-                </div>
-                <div className="rounded bg-gray-900 p-2">
-                  <p className="text-[10px] text-yellow-300 break-all">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<span className="text-blue-300">eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiw…</span>.<span className="text-pink-300">SflKxwRJSMeKKF2QT4fw…</span></p>
-                </div>
-              </div>
+            {localToken && !tokenValid && (
+              <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle className="size-2.5 shrink-0" />Must start with eyJ… · 3 dot-separated parts</p>
             )}
-            {tokenEntered && tokenValid && (
-              <p className="text-[11px] text-green-600 dark:text-green-400 flex items-center gap-1">
-                <span className="inline-block size-2 rounded-full bg-green-500" />Token looks valid
-              </p>
+            {localToken && tokenValid && (
+              <p className="text-[10px] text-emerald-400 flex items-center gap-1"><span className="size-1.5 rounded-full bg-emerald-400 inline-block" />Token valid</p>
             )}
             <div className="flex flex-wrap gap-1.5">
               {KNOWN_TENANTS.map(t => (
-                <button key={t.id} onClick={() => setLocalTenantId(t.id)} className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors cursor-pointer ${localTenantId === t.id ? 'bg-orange-500 text-white border-orange-500' : 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50'}`}>
-                  {t.id} · {t.name}
+                <button key={t.id} onClick={() => setLocalTenantId(t.id)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer
+                    ${localTenantId === t.id ? 'bg-[#6366F1]/20 text-[#818CF8] border-[#6366F1]/50' : 'bg-transparent text-gray-500 border-gray-700 hover:border-[#6366F1]/40 hover:text-gray-300'}`}>
+                  <span className="font-mono">{t.id}</span> {t.name}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <Input type="text" value={localTenantId} onChange={e => setLocalTenantId(e.target.value)} placeholder="Tenant ID (e.g. 708, 871)" autoComplete="off" className="h-9 text-[12px] w-48" />
-              <Button onClick={() => setShowTokenInput(false)} variant="ghost" size="sm" className="h-9 text-[12px] cursor-pointer">Done</Button>
+              <input
+                type="text"
+                value={localTenantId}
+                onChange={e => setLocalTenantId(e.target.value)}
+                placeholder="Tenant ID"
+                className="h-8 px-3 w-32 rounded-lg border border-gray-700 bg-gray-800 text-[11px] font-mono text-gray-200 outline-none focus:border-[#6366F1]/60 transition-colors"
+              />
+              <button onClick={() => setShowTokenInput(false)} className="h-8 px-3 rounded-lg border border-gray-700 text-[11px] text-gray-400 hover:text-gray-200 hover:border-gray-600 cursor-pointer transition-colors">Done</button>
             </div>
-          </div>
-        )}
-
-        {/* Controls */}
-        <div className="flex items-end gap-4 flex-wrap">
-          <div className="flex flex-col gap-1">
-            <Label className="text-[11px] text-gray-600 dark:text-gray-400">Parallel PB submissions</Label>
-            <Input
-              type="number" min={2} max={10} value={parallelCount}
-              onChange={e => setParallelCount(Math.max(2, Math.min(10, parseInt(e.target.value) || 3)))}
-              disabled={running} className="h-9 w-24 text-[12px]"
-            />
-          </div>
-          <Button
-            onClick={handleRun}
-            disabled={running || !token}
-            className="h-9 bg-[#3F51B5] hover:bg-[#303F9F] text-white text-[12px] gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-            {running ? 'Running…' : `Run (${parallelCount}× PB)`}
-          </Button>
-          {!token && <span className="text-[11px] text-orange-500 dark:text-orange-400">Set ERP token first ↑</span>}
-        </div>
-
-        {/* Result banners */}
-        {duplicateDetected === true && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg flex items-start gap-2">
-            <AlertTriangle className="size-4 text-red-500 shrink-0 mt-0.5" />
-            <div className="text-[12px] text-red-700 dark:text-red-300">
-              <p className="font-semibold">Duplicate PBs created — ERP has no concurrency guard</p>
-              <p className="text-[11px] mt-0.5">Multiple Purchase Bookings were accepted for the same QC/GRN/PO. Accounting entries have been posted multiple times.</p>
-            </div>
-          </div>
-        )}
-        {duplicateDetected === false && (
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-lg text-[12px] text-emerald-700 dark:text-emerald-300 font-medium">
-            ✓ ERP correctly rejected duplicate submissions — only 1 PB was created.
           </div>
         )}
       </div>
 
-      {/* ── General log strip (Step 1, payload, summary) ──────────────────── */}
-      {generalLogs.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shrink-0">
-          <div className="px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2">
-            <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Chain log</span>
-            {running && <span className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] animate-pulse">● live</span>}
-          </div>
-          <div className="p-2 space-y-0.5 font-mono max-h-36 overflow-y-auto">
-            {generalLogs.map((log, i) => (
-              <div key={i} className={`flex gap-1.5 items-start text-[10px] ${log.isErr ? 'text-red-500 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                <span className="text-gray-400 shrink-0">[{formatTime(log.ts)}]</span>
-                <span className="whitespace-pre-wrap break-all">{log.text}</span>
+      {/* ── Chain phase strip ────────────────────────────────────────────────── */}
+      {chainPhase !== 'idle' && (
+        <div className="bg-gray-900 border border-gray-700/60 rounded-xl px-4 py-2.5 flex items-center gap-3 shrink-0">
+          {chainPhase === 'building'
+            ? <Loader2 className="size-3.5 text-[#6366F1] animate-spin shrink-0" />
+            : <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />}
+          <span className="text-[11px] font-medium text-gray-400">
+            {chainPhase === 'building' ? 'Building chain…' : 'Chain ready'}
+          </span>
+          {chainPhase === 'ready' && chainDoneText && (
+            <>
+              <span className="text-gray-700 text-[10px]">·</span>
+              <ChainDocs text={chainDoneText} />
+            </>
+          )}
+          {chainPhase === 'ready' && running && (
+            <>
+              <span className="text-gray-700 text-[10px]">·</span>
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="size-3 text-[#6366F1] animate-spin" />
+                <span className="text-[10px] text-[#818CF8]">firing {parallelCount} threads</span>
               </div>
-            ))}
-            <div ref={generalEndRef} />
-          </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* ── Per-PB panels ─────────────────────────────────────────────────── */}
-      {pbStates.length > 0 && (
-        <div className={`grid gap-3 ${gridCols(pbStates.length)} flex-1 min-h-0`}>
+      {/* ── PB panels ────────────────────────────────────────────────────────── */}
+      {hasRun && (
+        <div className={`grid gap-3 ${gridClass(pbStates.length)} flex-1 min-h-0`}>
           {pbStates.map((state, i) => (
             <PbPanel key={i} idx={i} state={state} running={running} />
           ))}
+        </div>
+      )}
+
+      {/* ── Result banner ────────────────────────────────────────────────────── */}
+      {duplicateDetected === true && (
+        <div className="shrink-0 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="size-4 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[12px] font-semibold text-red-400">
+              {createdCount} duplicate PBs created — ERP has no concurrency guard
+            </p>
+            <p className="text-[11px] text-red-500/70 mt-0.5">
+              All {createdCount} Purchase Bookings were accepted for the same QC/GRN/PO. Accounting entries have been posted {createdCount}×.
+            </p>
+          </div>
+        </div>
+      )}
+      {duplicateDetected === false && (
+        <div className="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+          <p className="text-[12px] font-semibold text-emerald-400">✓ ERP rejected duplicate submissions</p>
+          <p className="text-[11px] text-emerald-500/60 mt-0.5">Only 1 PB was created and posted.</p>
         </div>
       )}
     </div>
