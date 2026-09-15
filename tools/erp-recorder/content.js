@@ -112,6 +112,18 @@ window.__erpRecorderInjected = true;
     #__erp_rec_cap_all:hover { background: #1158c7; }
     #__erp_rec_cap_all.on { display: inline-block; }
 
+    #__erp_rec_toast {
+      display: none;
+      padding: 4px 10px; border-top: 1px solid #21262d;
+      font: 10px/1.4 'Consolas','Monaco',monospace;
+      color: #3fb950; background: #0d1117;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 340px;
+      opacity: 1; transition: opacity .4s ease;
+    }
+    #__erp_rec_toast.show { display: block; }
+    #__erp_rec_toast.fade { opacity: 0; }
+
     .__erp_icon_btn {
       background: transparent; border: none; color: #484f58;
       font: 12px/1 'Consolas','Monaco',monospace; cursor: pointer;
@@ -139,6 +151,7 @@ window.__erpRecorderInjected = true;
     <div id="__erp_rec_mini" title="Expand recorder">
       <span id="__erp_rec_dot2">●</span>
     </div>
+    <div id="__erp_rec_toast"></div>
   `;
   document.body.appendChild(bar);
 
@@ -260,6 +273,21 @@ window.__erpRecorderInjected = true;
     if (['select', 'input', 'button', 'swal2', 'navigate', 'start'].includes(step.type)) {
       lastAction = step;
     }
+    // Toast feedback for every recorded step
+    const toastMsg = (() => {
+      switch (step.type) {
+        case 'select':   return `▾ ${step.label} → "${step.value}"`;
+        case 'input':    return `✎ ${step.label} = "${step.value}"`;
+        case 'button':   return `⏎ ${step.label}`;
+        case 'swal2':    return `✔ ${step.value}`;
+        case 'navigate': return `↗ navigated`;
+        case 'start':    return `▶ recording started`;
+        case 'error':    return `⚠ ${step.label}: "${step.value}"`;
+        case 'readonly': return `● ${step.label} = "${step.value}"`;
+        default:         return step.label ? `${step.label}` : null;
+      }
+    })();
+    if (toastMsg) _flashToast(toastMsg, null);
     setBarState(); persist();
     try { chrome.runtime.sendMessage({ type: 'STATE', recording, steps }); } catch (_) {}
     scheduleReadonlyScan();
@@ -308,11 +336,27 @@ window.__erpRecorderInjected = true;
       : `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`;
   }
 
+  let _toastTimer = null;
+  function _flashToast(msg, value) {
+    const t = document.getElementById('__erp_rec_toast');
+    if (!t) return;
+    clearTimeout(_toastTimer);
+    t.textContent = value != null ? `✓ ${msg} = "${value}"` : msg;
+    t.classList.remove('fade');
+    t.classList.add('show');
+    _toastTimer = setTimeout(() => {
+      t.classList.add('fade');
+      setTimeout(() => { t.classList.remove('show', 'fade'); }, 420);
+    }, 2000);
+  }
+
   function recordReadonly(ro, grouped) {
     if (!ro || !ro.label || !ro.value) return;
     const key = `${ro.label}:${ro.rowIndex ?? ''}:${ro.value}`;
     if (recordedReadonly.has(key)) return;
     recordedReadonly.add(key);
+    // Toast for view-mode click captures (grouped ones don't go through addStep)
+    if (grouped) _flashToast(`✓ ${ro.label}`, ro.value);
     // Auto-patched fields (surfaced by the post-step snapshot, not clicked by
     // the user) fold into the action that triggered them instead of cluttering
     // the step list. Direct clicks stay standalone ("Assert field" steps).
