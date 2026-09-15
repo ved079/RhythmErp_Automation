@@ -29,7 +29,7 @@ class QCAPIUtils:
         if payload is None:
             payload = generate_qc_payload(fk_overrides=overrides)
         self._last_payload = payload
-        url = build_create_url(self.client.BASE_URL)
+        url = build_create_url(self.client.P2P_URL)
         resp = self.client.session.post(url, headers=self.client.session.headers, json=payload, timeout=30)
         self._last_response = resp
         self._last_status = resp.status_code
@@ -42,7 +42,7 @@ class QCAPIUtils:
         return None
 
     def get_qc(self, entry_id) -> Optional[Dict]:
-        url = build_get_url(self.client.BASE_URL, entry_id)
+        url = build_get_url(self.client.P2P_URL, entry_id)
         resp = self.client.session.get(url, headers=self.client.session.headers, timeout=30)
         if resp.status_code == 200:
             return resp.json()
@@ -51,7 +51,7 @@ class QCAPIUtils:
         return None
 
     def list_qcs(self, page: int = 1, page_size: int = 20) -> Optional[Dict]:
-        url = build_list_url(self.client.BASE_URL)
+        url = build_list_url(self.client.P2P_URL)
         resp = self.client.session.get(
             url,
             headers=self.client.session.headers,
@@ -65,7 +65,7 @@ class QCAPIUtils:
         return None
 
     def update_qc(self, entry_id: int, payload: dict) -> Optional[Dict]:
-        url = build_update_url(self.client.BASE_URL, entry_id)
+        url = build_update_url(self.client.P2P_URL, entry_id)
         resp = self.client.session.put(url, headers=self.client.session.headers, json=payload, timeout=30)
         self._last_response = resp
         self._last_status = resp.status_code
@@ -74,7 +74,7 @@ class QCAPIUtils:
         return None
 
     def get_schema(self) -> Optional[Dict]:
-        url = build_schema_url(self.client.BASE_URL)
+        url = build_schema_url(self.client.P2P_URL)
         resp = self.client.session.get(url, headers=self.client.session.headers, timeout=30)
         if resp.status_code == 200:
             return resp.json()
@@ -98,7 +98,7 @@ class QCAPIUtils:
         return {"entry": entry, "id": entry_id}
 
     def create_and_expect_failure(self, payload: dict) -> int:
-        url = build_create_url(self.client.BASE_URL)
+        url = build_create_url(self.client.P2P_URL)
         resp = self.client.session.post(url, headers=self.client.session.headers, json=payload, timeout=30)
         self._last_response = resp
         self._last_status = resp.status_code

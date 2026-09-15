@@ -42,7 +42,7 @@ class PBAPIUtils:
         """
         submission_id = str(uuid.uuid4())
         params = {**CREATE_PARAMS, "submission_id": submission_id}
-        url = build_create_url(self.client.BASE_URL)
+        url = build_create_url(self.client.P2P_URL)
         resp = self.client.session.post(
             url, headers=self.client.session.headers, json=payload, params=params, timeout=30
         )
@@ -64,7 +64,7 @@ class PBAPIUtils:
         Auth is Bearer token (same session headers — no separate cookie needed).
         """
         import json as _json
-        url = f"{self.client.BASE_URL}/notification/api/transactions/{submission_id}/events/"
+        url = f"{self.client.NOTIFICATION_URL}/notification/api/transactions/{submission_id}/events/"
         try:
             with self.client.session.get(
                 url,
@@ -91,7 +91,7 @@ class PBAPIUtils:
             return
 
     def get_pb(self, entry_id: int) -> Optional[dict]:
-        url = build_get_url(self.client.BASE_URL, entry_id)
+        url = build_get_url(self.client.P2P_URL, entry_id)
         resp = self.client.session.get(url, headers=self.client.session.headers, timeout=30)
         self._last_response = resp
         self._last_status = resp.status_code
@@ -100,7 +100,7 @@ class PBAPIUtils:
         return None
 
     def list_pbs(self, page: int = 1, page_size: int = 10) -> Optional[dict]:
-        url = build_list_url(self.client.BASE_URL)
+        url = build_list_url(self.client.P2P_URL)
         resp = self.client.session.get(
             url,
             headers=self.client.session.headers,
@@ -120,7 +120,7 @@ class PBAPIUtils:
         return None
 
     def update_pb(self, entry_id: int, payload: dict) -> Optional[dict]:
-        url = build_update_url(self.client.BASE_URL, entry_id)
+        url = build_update_url(self.client.P2P_URL, entry_id)
         resp = self.client.session.put(url, headers=self.client.session.headers, json=payload, timeout=30)
         self._last_response = resp
         self._last_status = resp.status_code
@@ -129,7 +129,7 @@ class PBAPIUtils:
         return None
 
     def get_schema(self) -> Optional[dict]:
-        url = build_schema_url(self.client.BASE_URL)
+        url = build_schema_url(self.client.P2P_URL)
         resp = self.client.session.get(url, headers=self.client.session.headers, timeout=30)
         if resp.status_code == 200:
             return resp.json()

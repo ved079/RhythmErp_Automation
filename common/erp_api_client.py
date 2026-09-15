@@ -47,6 +47,8 @@ class RhythmERPAPIClient:
     """
 
     BASE_URL = config.RHYTHMERP_BASE_URL.rstrip("/")
+    P2P_URL = config.RHYTHMERP_P2P_URL.rstrip("/")
+    NOTIFICATION_URL = config.RHYTHMERP_NOTIFICATION_URL.rstrip("/")
     API_ENDPOINT = "/core/dynamic-screen-wrapper/"
     SCREEN_SCHEMA_ENDPOINT = "/core/dynamic-screen/{screen_name}/"
 

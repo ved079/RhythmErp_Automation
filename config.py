@@ -19,6 +19,10 @@ load_dotenv()
 # RHYTHMERP APPLICATION
 # ============================================================
 RHYTHMERP_BASE_URL = os.getenv("RHYTHMERP_BASE_URL", "https://rhythmerp.algorhythms.in")
+# Microservice overrides — only needed for split-port local setups (e.g. Ritik's UAT).
+# Default to RHYTHMERP_BASE_URL so single-host prod/staging setups are unaffected.
+RHYTHMERP_P2P_URL = os.getenv("RHYTHMERP_P2P_URL", RHYTHMERP_BASE_URL)
+RHYTHMERP_NOTIFICATION_URL = os.getenv("RHYTHMERP_NOTIFICATION_URL", RHYTHMERP_BASE_URL)
 RHYTHMERP_LOGIN_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/signin"
 LOGIN_URL = RHYTHMERP_LOGIN_URL
 COMPANY_ONBOARDING_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Company%20Onboarding"
