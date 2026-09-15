@@ -2264,3 +2264,267 @@ class TestPBBlockedByMissingItemAccounting:
         assert pb.page.locator(f"tr:has-text('{qc_ref}')").count() == 0, \
             f"PB unexpectedly created for QC {qc_ref!r}"
         print(f"\n[PB-acct-fail] step4: PB listing empty for QC {qc_ref!r} ✓")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Farmer supplier visibility: present in QC, absent in PO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_FARMER_SCREEN_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Farmer/Farmer"
+
+
+@pytest.mark.po_qc_pb
+class TestFarmerSupplierRestriction:
+    """Verify farmer-type suppliers appear in QC supplier dropdown but NOT in PO."""
+
+    def test_step1_get_farmer_name(self, logged_in_page, integration_state):
+        logged_in_page.goto(_FARMER_SCREEN_URL)
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=20000)
+
+        # Open View on the first farmer row to read the canonical Farmer Name field
+        logged_in_page.locator("button.erp-row-trigger").first.click(force=True)
+        logged_in_page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+        logged_in_page.locator(
+            ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('View'))"
+        ).click()
+        logged_in_page.wait_for_timeout(1500)
+
+        farmer_name = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Farmer Name')]/ancestor::mat-form-field//input"
+        ).first.input_value().strip()
+        assert farmer_name, "Farmer Name must be non-empty"
+        integration_state["farmer_name"] = farmer_name
+        print(f"\n[farmer-restriction] step1: farmer = {farmer_name!r}")
+
+        logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)
+
+    def test_step2_farmer_not_in_po_supplier_dropdown(self, logged_in_page, integration_state):
+        if not integration_state.get("farmer_name"):
+            pytest.skip("Farmer name not captured in step 1")
+
+        farmer_name = integration_state["farmer_name"]
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        po.open_add_form()
+
+        # Open Supplier Name dropdown and search for the farmer name
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Name')]/ancestor::mat-form-field//mat-select"
+        ).first.click(force=True)
+        logged_in_page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+
+        search = logged_in_page.locator(".mat-mdc-select-panel input.dd-search-input")
+        if search.count() > 0:
+            search.fill(farmer_name)
+            logged_in_page.wait_for_timeout(1200)
+
+        matching = logged_in_page.locator(
+            f".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).filter(has_text=farmer_name)
+        assert matching.count() == 0, \
+            f"Farmer {farmer_name!r} should NOT appear in PO supplier dropdown"
+        print(f"\n[farmer-restriction] step2: {farmer_name!r} absent from PO dropdown ✓")
+
+        # Clear search and pick any available supplier to prove the dropdown works
+        if search.count() > 0:
+            search.fill("")
+            logged_in_page.wait_for_timeout(800)
+        opts = logged_in_page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option) span.mdc-list-item__primary-text"
+        ).all()
+        assert opts, "PO supplier dropdown must have at least one valid supplier"
+        import random as _r
+        _r.choice(opts).click(force=True)
+        try:
+            logged_in_page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        logged_in_page.wait_for_timeout(400)
+
+        # Cancel the PO add form
+        logged_in_page.locator(
+            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+        ).click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=10000)
+
+    def test_step3_farmer_in_qc_supplier_dropdown(self, logged_in_page, integration_state):
+        if not integration_state.get("farmer_name"):
+            pytest.skip("Farmer name not captured in step 1")
+
+        farmer_name = integration_state["farmer_name"]
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        qc.open_add_form()
+
+        _val_select_text(logged_in_page, "Supplier Name", farmer_name)
+        logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+
+        supplier_type = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).text_content().strip()
+        assert supplier_type == "Farmer", \
+            f"Expected Supplier Type='Farmer', got: {supplier_type!r}"
+        print(f"\n[farmer-restriction] step3: {farmer_name!r} in QC dropdown, type={supplier_type!r} ✓")
+
+        logged_in_page.locator(
+            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+        ).click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=10000)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestFarmerQCAndPB
+# Farmer supplier: QC (no PO) → PB → verify PB in listing
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_FARMER_QC_PB_ITEM_CATEGORY = "Bricks & Blocks"
+_FARMER_QC_PB_LOCATION      = "DHULE"
+_FARMER_QC_PB_DEPARTMENT    = "Procurement Department"
+_FARMER_QC_PB_DIVISION      = "STEEL DIVISION"
+_FARMER_QC_PB_TYPE_OF_SALE  = "1V1"
+_FARMER_QC_PB_ITEM_NAME     = "Welding Electrode FLUID TRANSFER ABRASION RESISTANT REINFORCED TYPE"
+_FARMER_QC_PB_PURCHASE_RATE = "25000"
+_FARMER_QC_PB_RECV_QTY      = "2500"
+
+
+@pytest.mark.po_qc_pb
+class TestFarmerQCAndPB:
+    """End-to-end: farmer supplier → QC (no PO) → PB → listing verification."""
+
+    def test_step1_get_farmer_name(self, logged_in_page, integration_state):
+        logged_in_page.goto(_FARMER_SCREEN_URL)
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=20000)
+
+        logged_in_page.locator("button.erp-row-trigger").first.click(force=True)
+        logged_in_page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+        logged_in_page.locator(
+            ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('View'))"
+        ).click()
+        logged_in_page.wait_for_timeout(1500)
+
+        farmer_name = logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Farmer Name')]/ancestor::mat-form-field//input"
+        ).first.input_value().strip()
+        assert farmer_name, "Farmer Name must be non-empty"
+        integration_state["farmer_qc_pb_farmer_name"] = farmer_name
+        print(f"\n[farmer-qc-pb] step1: farmer = {farmer_name!r}")
+
+        logged_in_page.locator("xpath=//mat-icon[text()='close']/ancestor::button").first.click()
+        logged_in_page.wait_for_selector("table.mat-mdc-table", timeout=10000)
+
+    def test_step2_create_qc_with_farmer(self, logged_in_page, integration_state):
+        if not integration_state.get("farmer_qc_pb_farmer_name"):
+            pytest.skip("Farmer name not captured in step 1")
+
+        farmer_name = integration_state["farmer_qc_pb_farmer_name"]
+        page = logged_in_page
+        qc = QCPlaywrightPage(page)
+        qc.navigate_to_page()
+        page.reload()
+        qc.open_add_form()
+
+        _val_select_text(page, "Supplier Name", farmer_name)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        assert page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).text_content().strip() == "Farmer", "Supplier Type must be Farmer"
+
+        _val_select_text(page, "Item category", _FARMER_QC_PB_ITEM_CATEGORY)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Location')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Location", _FARMER_QC_PB_LOCATION)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Department')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Department", _FARMER_QC_PB_DEPARTMENT)
+        page.locator(
+            "xpath=//mat-label[contains(.,'Division')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+        _val_select_text(page, "Division", _FARMER_QC_PB_DIVISION)
+        _val_select_text(page, "Type of Sale", _FARMER_QC_PB_TYPE_OF_SALE)
+        _val_select_text(page, "Item Name", _FARMER_QC_PB_ITEM_NAME)
+        page.locator(
+            "xpath=//mat-label[contains(.,'UOM')]/ancestor::mat-form-field//mat-select"
+        ).wait_for(state="visible", timeout=10000)
+
+        # Bags popup: first Type of Bag, No of Bags=1, Per Bag Weight=0.2
+        qc.fill_bags_popup(row_index=0, no_of_bags="1", per_bag_weight="0.2")
+
+        # Purchase Rate and Received Quantity are in the main QC form (no PO to auto-fill them)
+        _val_fill(page, "Purchase Rate", _FARMER_QC_PB_PURCHASE_RATE)
+        _val_fill(page, "Received Quantity", _FARMER_QC_PB_RECV_QTY)
+        page.wait_for_timeout(500)
+
+        # QC params popup: CS=11.1, TS=4.1, YS=11.1 (from recorder)
+        qc.open_qc_param_popup(row_index=0)
+        _val_fill(page, "Actual Value", "11.1", row_index=0)
+        _val_fill(page, "Actual Value", "4.1",  row_index=1)
+        _val_fill(page, "Actual Value", "11.1", row_index=2)
+        qc.click_done()
+        page.wait_for_timeout(500)
+
+        page.locator(qc.SUBMIT_BTN).click()
+        page.wait_for_selector(".swal2-container", timeout=15000)
+        title = page.locator(".swal2-title, .swal2-html-container").first.inner_text()
+        assert "successfully" in title.lower(), f"Unexpected swal2: {title!r}"
+        try:
+            page.locator(".swal2-confirm").click(timeout=5000)
+        except Exception:
+            pass
+        page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+
+        qc_ref = qc.get_ref_no_of_first_row()
+        assert qc_ref, "QC ref must be non-empty after creation"
+        integration_state["farmer_qc_pb_qc_ref"] = qc_ref
+        print(f"\n[farmer-qc-pb] step2: QC created = {qc_ref!r}")
+
+    def test_step3_create_pb_from_farmer_qc(self, logged_in_page, integration_state):
+        if not integration_state.get("farmer_qc_pb_qc_ref"):
+            pytest.skip("QC ref not captured in step 2")
+
+        farmer_name = integration_state["farmer_qc_pb_farmer_name"]
+        qc_ref      = integration_state["farmer_qc_pb_qc_ref"]
+        page = logged_in_page
+        pb   = PBPlaywrightPage(page)
+        pb.navigate_to_page()
+        page.reload()
+        pb.open_add_form()
+
+        pb.select_supplier(farmer_name)
+        pb.select_qc(qc_ref)
+        page.wait_for_timeout(1000)
+
+        # submit() handles tracking card, navigates back, returns the new PB ref
+        pb_ref = pb.submit()
+        assert pb_ref, "PB ref must be non-empty after creation"
+        integration_state["farmer_qc_pb_pb_ref"] = pb_ref
+        print(f"\n[farmer-qc-pb] step3: PB created = {pb_ref!r}")
+
+    def test_step4_verify_pb_in_listing(self, logged_in_page, integration_state):
+        if not integration_state.get("farmer_qc_pb_pb_ref"):
+            pytest.skip("PB ref not captured in step 3")
+
+        pb_ref = integration_state["farmer_qc_pb_pb_ref"]
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        logged_in_page.reload()
+
+        pb.page.locator("button[mattooltip='Search']").click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        if not pb.page.locator("input#erpSearchInput").is_visible():
+            pb.page.locator("button[mattooltip='Search']").click(force=True)
+            logged_in_page.wait_for_timeout(400)
+        pb.page.locator("input#erpSearchInput").fill(pb_ref)
+        pb.page.locator("input#erpSearchInput").press("Enter")
+        pb.page.wait_for_timeout(1500)
+
+        assert pb.page.locator(f"tr:has-text('{pb_ref}')").count() > 0, \
+            f"PB {pb_ref!r} not found in listing after creation"
+        print(f"\n[farmer-qc-pb] step4: {pb_ref!r} found in PB listing ✓")
