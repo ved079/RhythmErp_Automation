@@ -64,15 +64,48 @@ def pb_concurrency_stream(request: PBConcurrencyTestRequest) -> Generator[str, N
     yield _log("Step 1 — running PO → GP → GRN → QC…")
     try:
         chain = FullChain(token=request.erp_token, tenant=request.erp_tenant_id, delay=0)
-        ctx_kwargs = {}
-        if request.item_category_id:
-            ctx_kwargs["item_category_id"] = request.item_category_id
-        ctx = chain.get_context(**ctx_kwargs)
-        run_kwargs: dict = dict(num_items=1, documents=["PO", "GP", "GRN", "QC"], ctx=ctx,
-                                require_tax_rate=request.require_tax_rate)
-        if request.item_ref_ids:
-            run_kwargs["item_ref_ids"] = request.item_ref_ids
-        result = chain.run(**run_kwargs)
+
+        # Tenant 666 (Ritik's local): inject hardcoded context to skip all discovery
+        if request.erp_tenant_id == "666":
+            from pages.private_b2b.scripts.chain_context import ChainContext
+            yield _log("Tenant 666 detected — using hardcoded context (no discovery)")
+            chain._context = ChainContext(
+                supplier_ref_id    = 2560,
+                item_ref_id        = 65,
+                item_type_ref_id   = 1,
+                hsn_sac_no         = 5,
+                alternate_uom      = 3,
+                base_uom           = 4,
+                po_type            = 24,
+                base_currency      = 8,
+                txn_currency       = 66,
+                parameter1         = 1,
+                parameter2         = 1,
+                parameter5         = 1,
+                parameter6         = 1,
+                payment_terms      = 549,
+                delivery_terms     = 130,
+                packing_forwarding = 89,
+                supplier_ship_from = 3108,
+                supplier_bill_from = 3109,
+                delivery_type      = 29,
+                supplier_ref_type  = "Supplier",
+                pb_payment_terms   = 551,
+                quality_parameters = [{"item_quality_parameter_ref_id": p, "actual_value": 1} for p in [4, 7, 11]],
+            )
+            ctx = chain._context
+            result = chain.run(num_items=1, documents=["PO", "GP", "GRN", "QC"], ctx=ctx,
+                               require_tax_rate=False)
+        else:
+            ctx_kwargs = {}
+            if request.item_category_id:
+                ctx_kwargs["item_category_id"] = request.item_category_id
+            ctx = chain.get_context(**ctx_kwargs)
+            run_kwargs: dict = dict(num_items=1, documents=["PO", "GP", "GRN", "QC"], ctx=ctx,
+                                    require_tax_rate=request.require_tax_rate)
+            if request.item_ref_ids:
+                run_kwargs["item_ref_ids"] = request.item_ref_ids
+            result = chain.run(**run_kwargs)
     except Exception as e:
         yield _err(f"Chain (PO→QC) failed: {e}")
         return
