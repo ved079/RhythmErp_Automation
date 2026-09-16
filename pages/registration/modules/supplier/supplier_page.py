@@ -188,13 +188,10 @@ class SupplierPage(BasePlaywrightPage):
         self._select_mat_by_text(self.ADDR_ADDRESS_TYPE, "Billing", nth=1)
         self.page.wait_for_timeout(1500)
         self.page.evaluate("""
-            const labels = document.querySelectorAll('mat-checkbox .mdc-label');
-            for (const lbl of labels) {
-                if (lbl.textContent.trim().includes('Same as Above')) {
-                    lbl.click();
-                    break;
-                }
-            }
+            const matches = [...document.querySelectorAll('mat-checkbox .mdc-label')]
+                .filter(lbl => lbl.textContent.trim().includes('Same as Above'));
+            const target = matches[1] || matches[0];
+            if (target) target.click();
         """)
         self.page.wait_for_timeout(500)
 
