@@ -62,6 +62,37 @@ class TestSupplierSubmitExistingPan:
 
 
 @pytest.mark.regression
+class TestSupplierHistoryAccumulation:
+    def test_history_grows_with_edits(self, supplier_page):
+        data = _make_data()
+        supplier_page.create_record(data)
+        supplier_page.search_supplier(data["company_name"])
+
+        # No history before any edit
+        assert supplier_page.get_history_entry_count(data["company_name"]) == 0
+        supplier_page.search_supplier(data["company_name"])
+
+        # First edit — confirm 1 history entry appears
+        supplier_page.edit_field_and_update(
+            data["company_name"], "Contact Person Name", "Contact One"
+        )
+        supplier_page.search_supplier(data["company_name"])
+        assert supplier_page.get_history_entry_count(data["company_name"]) == 1
+        supplier_page.search_supplier(data["company_name"])
+
+        # 4 more back-to-back edits without checking history in between
+        supplier_page.bulk_edit_field(
+            data["company_name"],
+            "Contact Person Name",
+            ["Contact Two", "Contact Three", "Contact Four", "Contact Five"],
+        )
+        supplier_page.search_supplier(data["company_name"])
+
+        # 1 confirmed + 4 batch = 5 total
+        assert supplier_page.get_history_entry_count(data["company_name"]) == 5
+
+
+@pytest.mark.regression
 class TestSupplierEditAndHistory:
     def test_create_edit_view_history(self, supplier_page):
         data = _make_data()
@@ -71,9 +102,9 @@ class TestSupplierEditAndHistory:
         supplier_page.search_supplier(data["company_name"])
         supplier_page.verify_supplier_exists(data["company_name"])
 
-        # 2. History after create — ERP logs the creation event, so expect exactly 1 row
+        # 2. History after create — creation does not log a history row
         history_before = supplier_page.get_history_entry_count(data["company_name"])
-        assert history_before == 1, f"Expected 1 history row after create (creation event), got {history_before}"
+        assert history_before == 0, f"Expected 0 history rows after create, got {history_before}"
 
         # 3. Edit contact person
         updated_contact = "Updated Contact Person"

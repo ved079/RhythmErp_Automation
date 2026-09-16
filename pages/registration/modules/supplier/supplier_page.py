@@ -272,13 +272,6 @@ class SupplierPage(BasePlaywrightPage):
         assert self.is_supplier_in_table(company_name), \
             f"Supplier '{company_name}' not found in table"
 
-    def _find_row_index(self, company_name):
-        rows = self.page.locator("table#excel-table tbody tr")
-        for i in range(rows.count()):
-            if company_name in rows.nth(i).inner_text():
-                return i
-        raise AssertionError(f"Supplier '{company_name}' not found in table")
-
     # ── Row actions ──────────────────────────────────────────────────────
 
     def get_first_supplier_pan(self):
@@ -299,14 +292,6 @@ class SupplierPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         return pan
 
-    def get_history_entry_count(self, company_name):
-        """Open History for company_name, return row count, then close."""
-        self.click_row_action(self._find_row_index(company_name), "History")
-        self.page.wait_for_timeout(1000)
-        count = self.page.locator("table tbody tr").count()
-        self.force_close_popup()
-        self.page.wait_for_timeout(500)
-        return count
 
     def get_view_field_value(self, company_name, field_label):
         """Open View for company_name, read field value, close popup."""

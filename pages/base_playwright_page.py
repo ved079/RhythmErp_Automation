@@ -87,6 +87,39 @@ class BasePlaywrightPage:
         search_input.press("Enter")
         self.page.wait_for_timeout(1000)
 
+    def _find_row_index(self, search_text):
+        rows = self.page.locator("table#excel-table tbody tr")
+        for i in range(rows.count()):
+            if search_text in rows.nth(i).inner_text():
+                return i
+        raise AssertionError(f"Row containing '{search_text}' not found in table")
+
+    def get_history_entry_count(self, record_name):
+        """Open History for record_name, return row count (0 if empty), then close.
+
+        History opens in-place (replaces the main table), so after a fixed wait
+        whatever is in table#excel-table is the history content.
+        """
+        self.click_row_action(self._find_row_index(record_name), "History")
+        self.page.wait_for_timeout(2500)
+        if self.page.locator(".empty-state").is_visible():
+            count = 0
+        else:
+            # History opens as an overlay — nth(1) is the dialog table, nth(0) is the main page table
+            count = self.page.locator("table#excel-table").nth(1).locator("tbody tr").count()
+        self.force_close_popup()
+        self.page.wait_for_timeout(500)
+        return count
+
+    def bulk_edit_field(self, record_name, field_label, values):
+        """Apply each value in sequence via edit → update, without reading history in between.
+
+        Searches before each edit because navigate_to_page() clears the search filter.
+        """
+        for v in values:
+            self.search_entry(record_name)
+            self.edit_field_and_update(record_name, field_label, v)
+
     def click_row_action(self, row_index, action):
         self.page.evaluate(f"""
             var btns = document.querySelectorAll('button.erp-row-trigger');
