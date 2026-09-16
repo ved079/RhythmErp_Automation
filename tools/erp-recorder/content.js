@@ -1269,6 +1269,35 @@ window.__erpRecorderInjected = true;
     });
   }, true);
 
+  // ── History dialog row-count capture ─────────────────────────────
+  // When a .cdk-overlay-pane opens containing table#excel-table (history popup),
+  // read the current row count and emit an assertion step.
+  const historyPaneMO = new MutationObserver(muts => {
+    if (!recording) return;
+    for (const m of muts) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (!node.classList?.contains('cdk-overlay-pane')) continue;
+        setTimeout(() => {
+          const empty = node.querySelector('.empty-state');
+          const rows  = node.querySelectorAll('table#excel-table tbody tr');
+          if (!empty && rows.length === 0) return; // not a history/list dialog
+          const count = rows.length;
+          const code = empty
+            ? `# history: empty\nassert page.locator(".empty-state").is_visible()`
+            : `# history: ${count} row(s)\nassert page.locator("table#excel-table tbody tr").count() == ${count}`;
+          addStep({
+            type: 'readonly',
+            label: 'History rows',
+            value: empty ? '0 (empty)' : String(count),
+            code
+          });
+        }, 600);
+      }
+    }
+  });
+  historyPaneMO.observe(document.body, { childList: true, subtree: true });
+
   // ── tracking-card detection ───────────────────────────────────────
   const trackMO = new MutationObserver(muts => {
     if (!recording) return;
