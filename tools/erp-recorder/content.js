@@ -1135,7 +1135,7 @@ window.__erpRecorderInjected = true;
         type: 'button',
         label: lbl,
         value: checked ? 'checked' : 'unchecked',
-        code: `page.locator("mat-checkbox:has-text('${safeLbl}') input").set_checked(${checked})`
+        code: `page.locator("mat-checkbox:has-text('${safeLbl}') .mdc-label").click()`
       });
     }, 50);
   }, true);
