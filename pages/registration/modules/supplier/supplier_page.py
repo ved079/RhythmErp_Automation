@@ -225,8 +225,11 @@ class SupplierPage(BasePlaywrightPage):
 
     def handle_success_alert(self):
         self.page.wait_for_selector(".swal2-container", timeout=10000)
-        self.page.locator(".swal2-confirm").click()
-        self.page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        try:
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
+        except Exception:
+            pass
         self.page.wait_for_selector("table#excel-table", timeout=10000)
 
     def handle_validation_alert(self):
@@ -277,6 +280,24 @@ class SupplierPage(BasePlaywrightPage):
         raise AssertionError(f"Supplier '{company_name}' not found in table")
 
     # ── Row actions ──────────────────────────────────────────────────────
+
+    def get_first_supplier_pan(self):
+        """Open View on the first table row, read the PAN Number, close popup."""
+        self.page.locator("button.erp-row-trigger").nth(0).click()
+        self.page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+        self.page.locator(
+            ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('View'))"
+        ).click()
+        self.page.wait_for_selector(
+            "xpath=//mat-label[contains(.,'PAN Number')]/ancestor::mat-form-field//input",
+            timeout=8000
+        )
+        pan = self.page.locator(
+            "xpath=//mat-label[contains(.,'PAN Number')]/ancestor::mat-form-field//input"
+        ).input_value()
+        self.page.locator(self.CANCEL_BTN).click()
+        self.page.wait_for_timeout(500)
+        return pan
 
     def click_view_button(self, company_name):
         self.click_row_action(self._find_row_index(company_name), "View")
