@@ -1,5 +1,8 @@
 # Pacs Automation — Developer Guide
 
+## Git Rules
+- Never add `Co-Authored-By` lines to commit messages.
+
 ## Architecture
 
 Two-server setup. Both must run for the app to work.
