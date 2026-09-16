@@ -933,21 +933,22 @@ window.__erpRecorderInjected = true;
   }, true);
 
   // ── Button click recording ───────────────────────────────────────────
-  const FLOW_TEXT = /submit|save|update|close|cancel|add|create|approve|confirm|delete|done|ok/;
+  const FLOW_TEXT = /submit|save|update|close|cancel|add|create|approve|confirm|delete|done|ok|back|next/;
 
   function isFlowButton(btn) {
     if (btn.classList.contains('swal2-confirm')) return false;           // swal2 detector owns it
     if (btn.closest('.mat-mdc-select-panel, .mat-select-panel')) return false;
     if (btn.closest('#__erp_rec_bar')) return false;
     const cls = btn.className || '';
-    if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true; // ERP flow buttons
-    if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true; // remove row
-    if (cls.includes('erp-row-trigger')) return true;                     // ⋮ row action menu
-    if (btn.querySelector('.erp-menu-title')) return true;                // View/Edit/History menu items
-    if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) return true; // search toggle
-    if (btn.closest('.erp-search-container')) return true;               // search submit button
+    if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true;
+    if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true;
+    if (cls.includes('erp-row-trigger')) return true;
+    if (btn.querySelector('.erp-menu-title')) return true;
+    if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) return true;
+    if (btn.closest('.erp-search-container')) return true;
     if (btn.closest('.popup-footer, .form-footer, mat-dialog-actions, mat-dialog-title')) return true;
-    if (btn.closest('.cdk-overlay-container')) return false;             // stray overlay controls
+    if (btn.hasAttribute('matstepperprevious') || btn.hasAttribute('matsteppernext')) return true;
+    if (btn.closest('.cdk-overlay-container')) return false;
     const t = (btn.textContent || '').trim();
     return t.length > 0 && t.length < 60 && FLOW_TEXT.test(t.toLowerCase());
   }
@@ -1047,6 +1048,14 @@ window.__erpRecorderInjected = true;
         code: `page.locator("xpath=//mat-dialog-container//button[contains(.,'${text}')]").click()`
       };
     }
+    if (btn.hasAttribute('matstepperprevious') || btn.hasAttribute('matsteppernext')) {
+      const lbl = (btn.querySelector('.mdc-button__label') || btn).textContent.trim();
+      const attr = btn.hasAttribute('matstepperprevious') ? 'matstepperprevious' : 'matsteppernext';
+      return {
+        label: lbl,
+        code: `page.locator("button[${attr}]").click()`
+      };
+    }
     return { label: text, code: `page.get_by_role("button", name="${text}").click()` };
   }
 
@@ -1107,6 +1116,29 @@ window.__erpRecorderInjected = true;
     }
   });
   panelMO.observe(document.body, { childList: true, subtree: true });
+
+  // ── Checkbox recording (mat-checkbox) ────────────────────────────
+  document.addEventListener('click', e => {
+    if (!recording || inBar(e.target)) return;
+    const cb = e.target.closest('mat-checkbox');
+    if (!cb) return;
+    const lbl = (cb.querySelector('.mdc-label') || cb).textContent.trim();
+    if (!lbl) return;
+    const safeLbl = lbl.replace(/'/g, "\\'");
+    // Read state after Angular's change-detection tick: use native input.checked
+    // (the most reliable source — mdc-checkbox--selected and mat-mdc-checkbox-checked
+    // classes lag behind and can be inverted relative to visual state).
+    setTimeout(() => {
+      const nativeInp = cb.querySelector('input[type="checkbox"]');
+      const checked = nativeInp ? nativeInp.checked : cb.classList.contains('mat-mdc-checkbox-checked');
+      addStep({
+        type: 'button',
+        label: lbl,
+        value: checked ? 'checked' : 'unchecked',
+        code: `page.locator("mat-checkbox:has-text('${safeLbl}') input").set_checked(${checked})`
+      });
+    }, 50);
+  }, true);
 
   // ── Input recording ───────────────────────────────────────────────
   document.addEventListener('change', e => {
