@@ -1274,36 +1274,47 @@ window.__erpRecorderInjected = true;
   }, true);
 
   // ── History dialog row-count capture ─────────────────────────────
-  // Triggered when a "History" button is recorded. Polls the overlay area
-  // (any .cdk-overlay-pane or .mat-mdc-dialog-container added after the click)
-  // every 200ms up to 4 s for table#excel-table rows or .empty-state.
+  // Triggered when a "History" button is recorded. Takes a baseline count of
+  // table#excel-table and .empty-state elements BEFORE the dialog opens, then
+  // polls every 200ms (up to 4 s) for any NEW instance to appear anywhere in
+  // the DOM — regardless of what container the history popup uses.
   let _historyWatchTimer = null;
   function _startHistoryWatch() {
     clearInterval(_historyWatchTimer);
+    const baseTables = document.querySelectorAll('table#excel-table').length;
+    const baseEmpty  = document.querySelectorAll('.empty-state').length;
     let tries = 0;
     _historyWatchTimer = setInterval(() => {
       tries++;
-      // Search inside any overlay / dialog container that is NOT the main page
-      const dialogs = document.querySelectorAll(
-        '.cdk-overlay-pane, .mat-mdc-dialog-container, .mat-dialog-container'
-      );
-      for (const dlg of dialogs) {
-        const empty = dlg.querySelector('.empty-state');
-        const rows  = dlg.querySelectorAll('table#excel-table tbody tr');
-        if (!empty && rows.length === 0) continue;
+      const tables  = document.querySelectorAll('table#excel-table');
+      const empties = document.querySelectorAll('.empty-state');
+
+      if (empties.length > baseEmpty) {
+        // A new empty-state appeared — history dialog is open with no rows
         clearInterval(_historyWatchTimer);
-        const count = rows.length;
-        const code = empty
-          ? `# history: empty\nassert page.locator(".empty-state").is_visible()`
-          : `# history: ${count} row(s)\nassert page.locator("table#excel-table tbody tr").count() == ${count}`;
         addStep({
-          type: 'readonly',
-          label: 'History rows',
-          value: empty ? '0 (empty)' : String(count),
-          code
+          type: 'readonly', label: 'History rows', value: '0 (empty)',
+          code: `# history: empty\nassert page.locator(".empty-state").is_visible()`
         });
         return;
       }
+
+      if (tables.length > baseTables) {
+        // A new table appeared — wait a tick for rows to render then read count
+        const newTable = tables[baseTables]; // first new table beyond baseline
+        const rows = newTable.querySelectorAll('tbody tr');
+        if (rows.length > 0 || tries >= 10) {
+          clearInterval(_historyWatchTimer);
+          const count = rows.length;
+          const nth = baseTables > 0 ? `.nth(${baseTables})` : '';
+          addStep({
+            type: 'readonly', label: 'History rows', value: String(count),
+            code: `# history: ${count} row(s)\nassert page.locator("table#excel-table")${nth}.locator("tbody tr").count() == ${count}`
+          });
+        }
+        return;
+      }
+
       if (tries >= 20) clearInterval(_historyWatchTimer); // 4 s timeout
     }, 200);
   }
