@@ -1015,7 +1015,7 @@ window.__erpRecorderInjected = true;
     const cls = btn.className || '';
     if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true;
     if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true;
-    if (cls.includes('erp-row-trigger')) return true;
+    if (cls.includes('erp-row-trigger') || cls.includes('erp-outline-btn')) return true;
     if (btn.querySelector('.erp-menu-title')) return true;
     if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) return true;
     if (btn.closest('.erp-search-container')) return true;
@@ -1060,10 +1060,11 @@ window.__erpRecorderInjected = true;
         .map(i => i.closest('button')).indexOf(btn);
       return { label: 'Remove row', code: `page.locator("button.apply-button").nth(${idx}).click()` };
     }
-    if (cls.includes('erp-row-trigger')) {
+    if (cls.includes('erp-row-trigger') || cls.includes('erp-outline-btn')) {
       // ⋮ row action menu — prefer a ref-no scoped locator (suite's
       // _open_row_action / tr:has-text) so replay targets the same record
       // even if row order/index changes; fall back to .nth(row_index).
+      const btnSel = cls.includes('erp-outline-btn') ? 'button.erp-outline-btn' : 'button.erp-row-trigger';
       const row = btn.closest('tr');
       const refCell = row && row.querySelector(
         'td.cdk-column-transaction_ref_no, td.mat-column-transaction_ref_no'
@@ -1072,10 +1073,10 @@ window.__erpRecorderInjected = true;
       let code;
       if (refNo && refNo.length >= 2) {
         const safeRef = refNo.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        code = `page.locator("tr:has-text('${safeRef}')").first.locator("button.erp-row-trigger").click(force=True)\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
+        code = `page.locator("tr:has-text('${safeRef}')").first.locator("${btnSel}").click(force=True)\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
       } else {
-        const idx = [...document.querySelectorAll('button.erp-row-trigger')].indexOf(btn);
-        code = `page.locator("button.erp-row-trigger").nth(${idx}).click()\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
+        const idx = [...document.querySelectorAll(btnSel)].indexOf(btn);
+        code = `page.locator("${btnSel}").nth(${idx}).click()\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
       }
       return { label: 'Row menu', code };
     }
