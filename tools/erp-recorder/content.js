@@ -936,7 +936,7 @@ window.__erpRecorderInjected = true;
   const FLOW_TEXT = /submit|save|update|close|cancel|add|create|approve|confirm|delete|done|ok|back|next/;
 
   function isFlowButton(btn) {
-    if (btn.classList.contains('swal2-confirm')) return false;           // swal2 detector owns it
+    if (btn.closest('.swal2-actions')) return false;                     // swal2 click listener owns it
     if (btn.closest('.mat-mdc-select-panel, .mat-select-panel')) return false;
     if (btn.closest('#__erp_rec_bar')) return false;
     const cls = btn.className || '';
@@ -1234,26 +1234,40 @@ window.__erpRecorderInjected = true;
   dialogMO.observe(document.body, { childList: true, subtree: false });
 
   // ── swal2 detection ───────────────────────────────────────────────
+  // Track the title of the most recently shown swal2 dialog so the click
+  // handler below can reference it when recording the button press.
+  let _lastSwalTitle = 'Alert';
   const swalMO = new MutationObserver(muts => {
-    if (!recording) return;
     for (const m of muts) {
       for (const node of m.addedNodes) {
         if (node.classList?.contains('swal2-container') ||
             node.querySelector?.('.swal2-container')) {
           setTimeout(() => {
-            const title = (node.querySelector?.('.swal2-title') || document.querySelector('.swal2-title'))
-              ?.textContent.trim() || 'Alert';
-            addStep({
-              type: 'swal2',
-              label: title,
-              code: `# swal2: "${title}"\npage.wait_for_selector(".swal2-container", timeout=10000)\npage.locator(".swal2-confirm").click()\npage.wait_for_selector(".swal2-container", state="hidden", timeout=15000)`
-            });
-          }, 200);
+            _lastSwalTitle = (node.querySelector?.('.swal2-title') ||
+              document.querySelector('.swal2-title'))?.textContent.trim() || 'Alert';
+          }, 100);
         }
       }
     }
   });
   swalMO.observe(document.body, { childList: true, subtree: false });
+
+  // Record whichever swal2 button the user actually clicks
+  document.addEventListener('click', e => {
+    if (!recording) return;
+    const btn = e.target.closest('.swal2-confirm, .swal2-cancel, .swal2-deny');
+    if (!btn) return;
+    const btnText = btn.textContent.trim() || btn.getAttribute('aria-label') || '?';
+    const sel = btn.classList.contains('swal2-cancel') ? '.swal2-cancel'
+               : btn.classList.contains('swal2-deny')  ? '.swal2-deny'
+               :                                          '.swal2-confirm';
+    addStep({
+      type: 'swal2',
+      label: _lastSwalTitle,
+      value: btnText,
+      code: `# swal2: "${_lastSwalTitle}" → "${btnText}"\npage.wait_for_selector(".swal2-container", timeout=10000)\npage.locator("${sel}").click()\npage.wait_for_selector(".swal2-container", state="hidden", timeout=15000)`
+    });
+  }, true);
 
   // ── tracking-card detection ───────────────────────────────────────
   const trackMO = new MutationObserver(muts => {
