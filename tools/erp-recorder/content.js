@@ -112,6 +112,14 @@ window.__erpRecorderInjected = true;
     #__erp_rec_cap_all:hover { background: #1158c7; }
     #__erp_rec_cap_all.on { display: inline-block; }
 
+    #__erp_rec_cap_tbl {
+      display: none; background: #0f2a1a; border: 1px solid #3fb950; color: #3fb950;
+      padding: 3px 7px; border-radius: 4px; font: 10px/1 'Consolas','Monaco',monospace;
+      cursor: pointer; letter-spacing: .04em; transition: background .15s;
+    }
+    #__erp_rec_cap_tbl:hover { background: #1a3d27; }
+    #__erp_rec_cap_tbl.on { display: inline-block; }
+
     #__erp_rec_toast {
       display: none;
       padding: 4px 10px; border-top: 1px solid #21262d;
@@ -144,6 +152,7 @@ window.__erpRecorderInjected = true;
       <button class="__erp_btn" id="__erp_rec_clr">Clear</button>
       <span id="__erp_rec_view_badge">VIEW</span>
       <button class="__erp_btn" id="__erp_rec_cap_all" title="Capture all fields on this view form">Cap All</button>
+      <button class="__erp_btn" id="__erp_rec_cap_tbl" title="Capture listing table as assertions">📋 Table</button>
       <span id="__erp_rec_cnt">0 steps</span>
       <button class="__erp_icon_btn" id="__erp_rec_view" title="Open full view">↗</button>
       <button class="__erp_icon_btn" id="__erp_rec_min" title="Minimize">—</button>
@@ -191,6 +200,10 @@ window.__erpRecorderInjected = true;
     e.stopPropagation();
     if (recording && viewMode) captureAllViewFields();
   });
+  document.getElementById('__erp_rec_cap_tbl').addEventListener('click', e => {
+    e.stopPropagation();
+    if (recording) captureTable();
+  });
   document.getElementById('__erp_rec_mini').addEventListener('click', () => {
     bar.classList.remove('mini');
   });
@@ -218,6 +231,8 @@ window.__erpRecorderInjected = true;
     // Show VIEW badge + Cap All button only while in view mode
     badge.classList.toggle('on',  recording && viewMode);
     capAll.classList.toggle('on', recording && viewMode);
+    // Show Table button whenever recording (table is always on the listing page)
+    document.getElementById('__erp_rec_cap_tbl').classList.toggle('on', recording);
   }
 
   function toggleRec() {
@@ -727,6 +742,60 @@ window.__erpRecorderInjected = true;
     pendingViewCaptures.clear();
     viewMode = false;
     setBarState();
+  }
+
+  // ── Capture Table ─────────────────────────────────────────────────────────
+  // Reads table#excel-table: extracts visible column headers (skipping "Actions")
+  // and all row data, then records a step with a full Playwright assertion block.
+  function captureTable() {
+    const tbl = document.querySelector('table#excel-table');
+    if (!tbl) { _flashToast('No table found on this page', null); return; }
+
+    // Headers — from <strong> inside <th>, skip the "Actions" column
+    const headers = [];
+    const headerCols = []; // column indices to include
+    tbl.querySelectorAll('thead th').forEach((th, i) => {
+      const text = (th.querySelector('strong') || th).textContent.trim();
+      if (text && text !== 'Actions') {
+        headers.push(text);
+        headerCols.push(i);
+      }
+    });
+
+    // Rows — collect cell text for each included column
+    const rows = [];
+    tbl.querySelectorAll('tbody tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      const rowVals = headerCols.map(ci => (cells[ci]?.textContent.trim() || ''));
+      rows.push(rowVals);
+    });
+
+    if (rows.length === 0) {
+      _flashToast('Table is empty', null);
+      return;
+    }
+
+    // Build Playwright assertion code
+    const safeStr = s => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const lines = [
+      `# table snapshot: ${rows.length} row(s) | ${headers.join(', ')}`,
+      `_rows = page.locator("table#excel-table tbody tr")`,
+      `assert _rows.count() == ${rows.length}`
+    ];
+    rows.forEach((vals, ri) => {
+      vals.forEach((val, vi) => {
+        const colIdx = headerCols[vi]; // actual <td> index
+        lines.push(`assert _rows.nth(${ri}).locator("td").nth(${colIdx}).text_content().strip() == "${safeStr(val)}"`);
+      });
+    });
+
+    addStep({
+      type: 'readonly',
+      label: `Table (${rows.length} rows)`,
+      value: `${rows.length}r × ${headers.length}c`,
+      code: lines.join('\n')
+    });
+    _flashToast(`📋 Table captured`, `${rows.length} rows`);
   }
 
   // Capture All: scan every mat-form-field on the page and record each value.
