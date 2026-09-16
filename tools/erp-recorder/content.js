@@ -1056,6 +1056,15 @@ window.__erpRecorderInjected = true;
     if (cls.includes('add-row-btn')) {
       return { label: 'Add row', code: 'page.locator("button.add-row-btn").click()' };
     }
+    if (btn.closest('td.action-container')) {
+      // Delete/action button inside a stepper grid row — use nth index among all action-container buttons
+      const icon = btn.querySelector('.material-icons, mat-icon')?.textContent.trim() || 'delete_outline';
+      const idx = [...document.querySelectorAll('td.action-container button')].indexOf(btn);
+      return {
+        label: `${icon} (row ${idx})`,
+        code: `page.locator("td.action-container button").nth(${idx}).click()`
+      };
+    }
     if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) {
       // Row removal — index among all remove-row buttons (matches suite's .nth(row_index))
       const idx = [...document.querySelectorAll('button.apply-button .fa-minus, button.apply-button i.fa-minus')]
@@ -1091,6 +1100,8 @@ window.__erpRecorderInjected = true;
       let sel, extraCode = '';
       if (tooltip) {
         sel = `button[mattooltip='${tooltip.replace(/'/g, "\\'")}']`;
+      } else if (btn.classList.contains('mat-mdc-menu-trigger')) {
+        sel = `button.mat-mdc-menu-trigger.erp-outline-btn`;
       } else {
         const idx = [...document.querySelectorAll('button.erp-outline-btn')].indexOf(btn);
         sel = `button.erp-outline-btn:nth-of-type(${idx + 1})`;

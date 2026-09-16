@@ -346,3 +346,13 @@ class SupplierPage(BasePlaywrightPage):
         texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]
         assert "Submit" not in texts and "Update" not in texts, \
             "View popup must not have Submit or Update"
+
+    def export_master(self):
+        """Open toolbar more_vert menu, click Export Master, return the downloaded file."""
+        self.page.locator("button.mat-mdc-menu-trigger.erp-outline-btn").click()
+        self.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        with self.page.expect_download() as dl:
+            self.page.locator(
+                ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('Export Master'))"
+            ).click()
+        return dl.value

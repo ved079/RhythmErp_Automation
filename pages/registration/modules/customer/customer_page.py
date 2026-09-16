@@ -1,3 +1,4 @@
+import random
 from pages.base_playwright_page import BasePlaywrightPage
 
 
@@ -14,16 +15,18 @@ class CustomerPage(BasePlaywrightPage):
     PHONE_NUMBER         = "xpath=//mat-form-field[.//mat-label[contains(.,'Phone Number')]]//input"
     PAN_NUMBER           = "xpath=//mat-form-field[.//mat-label[contains(.,'PAN Number')]]//input"
 
-    # Address fields (page 1, inline grid — 2 rows)
-    ADDR_ADDRESS_TYPE = "xpath=//mat-form-field[.//mat-label[contains(.,'Address Type')]]//mat-select"
-    ADDR_COUNTRY      = "xpath=//mat-form-field[.//mat-label[contains(.,'Country')]]//mat-select"
-    ADDR_STATE        = "xpath=//mat-form-field[.//mat-label[contains(.,'State')]]//mat-select"
-    ADDR_DISTRICT     = "xpath=//mat-form-field[.//mat-label[contains(.,'District')]]//mat-select"
-    ADDR_TALUKA       = "xpath=//mat-form-field[.//mat-label[contains(.,'Taluka')]]//mat-select"
-    ADDR_VILLAGE      = "xpath=//mat-form-field[.//mat-label[contains(.,'Village')]]//mat-select"
-    ADDR_ADDRESS      = "xpath=//mat-form-field[.//mat-label[contains(.,'Address')]]//input"
-    ADDR_PIN_CODE     = "xpath=//mat-form-field[.//mat-label[contains(.,'Pin Code')]]//mat-select"
-    ADDR_GSTIN        = "xpath=//mat-form-field[.//mat-label[contains(.,'GSTIN')]]//input"
+    # Address fields (page 2, inline grid — 2 rows)
+    # Use normalize-space exact matches to avoid catching unrelated labels like "Tax Registration Status"
+    ADDR_ADDRESS_TYPE = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Address Type']]//mat-select"
+    ADDR_COUNTRY      = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Country']]//mat-select"
+    ADDR_STATE        = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='State']]//mat-select"
+    ADDR_DISTRICT     = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='District']]//mat-select"
+    ADDR_TALUKA       = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Taluka']]//mat-select"
+    ADDR_VILLAGE      = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Village']]//mat-select"
+    ADDR_ADDRESS      = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Address']]//input"
+    ADDR_PIN_CODE     = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Pin Code']]//mat-select"
+    ADDR_REG_NUMBER   = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Registration Number']]//input"
+    ADDR_GSTIN        = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='GSTIN']]//input"
 
     # Additional Details (page 2)
     CONTACT_PERSON_NAME      = "xpath=//mat-form-field[.//mat-label[contains(.,'Contact Person Name')]]//input"
@@ -54,66 +57,129 @@ class CustomerPage(BasePlaywrightPage):
             "document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove())"
         )
 
-    def _select_mat_option(self, selector, nth=0):
-        sel = self.page.locator(selector).nth(nth)
-        sel.click(force=True)
+    def _select_mat_option_by_text(self, selector, text, nth=0):
+        """Open the nth dropdown and click the option whose text exactly matches."""
+        self.page.locator(selector).nth(nth).click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
-        self.page.locator(".mat-mdc-select-panel mat-option").first.wait_for(state="visible", timeout=3000)
-        self.page.evaluate("document.querySelector('.mat-mdc-select-panel mat-option')?.click()")
-        self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).filter(has_text=text)
+        matched = None
+        for opt in options.all():
+            if opt.inner_text().strip() == text:
+                matched = opt
+                break
+        if matched:
+            matched.click(force=True)
+        else:
+            self.page.locator(
+                ".mat-mdc-select-panel mat-option"
+            ).filter(has_text=text).first.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
         self.page.wait_for_timeout(300)
 
-    def _select_mat_option_by_text(self, selector, text, nth=0):
-        sel = self.page.locator(selector).nth(nth)
-        sel.click(force=True)
+    def _select_random_mat_option(self, selector, nth=0):
+        """Open the nth dropdown and pick a random non-clear option."""
+        self.page.locator(selector).nth(nth).click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
-        opt = self.page.locator(f".mat-mdc-select-panel mat-option:has-text('{text}')")
-        opt.first.wait_for(state="visible", timeout=3000)
-        opt.first.click(force=True)
-        self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option)"
+        ).all()
+        if options:
+            random.choice(options).click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(500)
+
+    def _try_select_random_mat_option(self, selector, nth=0):
+        """Like _select_random_mat_option but silently skips if no panel appears."""
+        self.page.locator(selector).nth(nth).click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
+        except Exception:
+            return
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option)"
+        ).all()
+        if options:
+            random.choice(options).click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
         self.page.wait_for_timeout(300)
 
     def _click_next(self):
+        # button[matsteppernext] is the Angular directive attribute — matches the Next button
         self.page.evaluate("""
-            const btns = document.querySelectorAll('button.mat-stepper-next');
+            const btns = document.querySelectorAll('button[matsteppernext]');
             for (const btn of btns) {
-                const content = btn.closest('.mat-horizontal-stepper-content, .step-shell');
-                if (content && !content.classList.contains('mat-horizontal-stepper-content-inactive')
-                    && getComputedStyle(content).display !== 'none') {
-                    btn.click(); break;
+                if (btn.offsetParent !== null && getComputedStyle(btn).display !== 'none') {
+                    btn.scrollIntoView({block: 'center'});
+                    btn.click();
+                    break;
                 }
             }
         """)
         self.page.wait_for_timeout(1000)
 
-    def _fill_address_row(self, row_index, address_text, gstin, address_type=None):
-        # Address Type — row 0 = Shipping, row 1 = Billing
+    def _fill_text(self, selector, value, nth=0):
+        loc = self.page.locator(selector).nth(nth)
+        loc.click(force=True)
+        loc.fill(str(value))
+        loc.press("Tab")
+
+    def _fill_address_row(self, row_index, address_text, address_type=None):
+        # Address Type
         if address_type:
             self._select_mat_option_by_text(self.ADDR_ADDRESS_TYPE, address_type, nth=row_index)
         else:
-            self._select_mat_option(self.ADDR_ADDRESS_TYPE, nth=row_index)
-        # Country — always India
-        self._select_mat_option_by_text(self.ADDR_COUNTRY, "India", nth=row_index)
-        # Cascading selects
-        for sel in [self.ADDR_STATE, self.ADDR_DISTRICT, self.ADDR_TALUKA]:
-            self._select_mat_option(sel, nth=row_index)
-        # Village optional
+            self._select_random_mat_option(self.ADDR_ADDRESS_TYPE, nth=row_index)
+
+        # Country (optional — not present in all customer forms)
         try:
-            self._select_mat_option(self.ADDR_VILLAGE, nth=row_index)
+            self.page.locator(self.ADDR_COUNTRY).nth(row_index).wait_for(state="visible", timeout=2000)
+            self._select_mat_option_by_text(self.ADDR_COUNTRY, "India", nth=row_index)
         except Exception:
             pass
+
+        # State — supplier pattern: select specific state, then wait for District cascade
+        self._select_mat_option_by_text(self.ADDR_STATE, "Maharashtra", nth=row_index)
+
+        # District — wait for cascade after State, then pick random
+        self.page.locator(self.ADDR_DISTRICT).nth(row_index).wait_for(state="visible", timeout=10000)
+        self._select_random_mat_option(self.ADDR_DISTRICT, nth=row_index)
+
+        # Taluka — cascades from District
+        self._select_random_mat_option(self.ADDR_TALUKA, nth=row_index)
+
+        # Village (optional)
+        self._try_select_random_mat_option(self.ADDR_VILLAGE, nth=row_index)
+
         # Address text
-        addr = self.page.locator(self.ADDR_ADDRESS).nth(row_index)
-        addr.click(force=True)
-        addr.fill(address_text)
-        addr.press("Tab")
-        # Pin Code mat-select
-        self._select_mat_option(self.ADDR_PIN_CODE, nth=row_index)
-        # GSTIN text
-        gstin_field = self.page.locator(self.ADDR_GSTIN).nth(row_index)
-        gstin_field.click(force=True)
-        gstin_field.fill(gstin)
-        gstin_field.press("Tab")
+        self._fill_text(self.ADDR_ADDRESS, address_text, nth=row_index)
+
+        # Pin Code (optional — depends on Taluka)
+        self._try_select_random_mat_option(self.ADDR_PIN_CODE, nth=row_index)
+
+        # Registration Number (appears per-row when Tax Reg Status = Registered)
+        try:
+            self.page.locator(self.ADDR_REG_NUMBER).nth(row_index).wait_for(state="visible", timeout=2000)
+            self._fill_text(self.ADDR_REG_NUMBER, "29ABCDE1234F1Z5", nth=row_index)
+        except Exception:
+            pass
+
+        # GSTIN (optional)
+        try:
+            self.page.locator(self.ADDR_GSTIN).nth(row_index).wait_for(state="visible", timeout=2000)
+            self._fill_text(self.ADDR_GSTIN, "29ABCDE1234F1Z5", nth=row_index)
+        except Exception:
+            pass
 
     def navigate_to_page(self):
         try:
@@ -139,64 +205,98 @@ class CustomerPage(BasePlaywrightPage):
             """)
         self.page.wait_for_selector(self.COMPANY_NAME, timeout=5000)
 
+    # Selector for Tax Registration Status (distinct from Gst Registration Status)
+    TAX_REGISTRATION_STATUS = "xpath=//mat-form-field[.//mat-label[contains(.,'Tax Registration Status')]]//mat-select"
+
     def fill_form(self, data):
-        # Page 1 — universal fields + additional details (same page)
-        for sel in [self.OWNERSHIP_STATUS, self.SALE_TYPE, self.SUPPLY_TYPE, self.TRANSACTION_CURRENCY]:
-            self._select_mat_option(sel)
-            self.page.wait_for_timeout(200)
+        # ── Step 1: Universal + Additional Details ────────────────────────
+        self._select_mat_option_by_text(self.OWNERSHIP_STATUS, data.get("ownership_status", "Proprietorship"))
+        self.page.wait_for_timeout(200)
 
-        for selector, key, default in [
-            (self.COMPANY_NAME, "company_name", "High Street Mart"),
-            (self.EMAIL,        "email",        "test@testmail.com"),
-            (self.PHONE_NUMBER, "phone_number", "9876543210"),
-            (self.PAN_NUMBER,   "pan_number",   "ABCDE1234F"),
-        ]:
-            loc = self.page.locator(selector).first
-            loc.click(force=True)
-            loc.fill(data.get(key, default))
-            loc.press("Tab")
+        self._fill_text(self.COMPANY_NAME, data["company_name"])
 
-        for sel in [
-            self.PREFERRED_PAYMENT_METHOD,
-            self.GST_REGISTRATION_STATUS,
-            self.GST_REGISTRATION_TYPE,
-            self.PAYMENT_TERMS,
-            self.MODE_OF_DELIVERY,
-            self.DELIVERY_TERMS,
-            self.COURIER_TERMS,
+        self._select_mat_option_by_text(self.SALE_TYPE, data.get("sale_type", "Export"))
+        self.page.wait_for_timeout(200)
+
+        self.page.locator(self.SUPPLY_TYPE).wait_for(state="visible", timeout=10000)
+        self._select_mat_option_by_text(self.SUPPLY_TYPE, data.get("supply_type", "Both"))
+        self.page.wait_for_timeout(200)
+
+        self._select_mat_option_by_text(self.TRANSACTION_CURRENCY, data.get("transaction_currency", "INR"))
+        self.page.wait_for_timeout(200)
+
+        self._fill_text(self.EMAIL, data.get("email", "test@testmail.com"))
+
+        if data.get("phone_number"):
+            self._fill_text(self.PHONE_NUMBER, data["phone_number"])
+
+        self._fill_text(self.PAN_NUMBER, data.get("pan_number", "ABCDE1234F"))
+        self._fill_text(self.CONTACT_PERSON_NAME, data.get("contact_person", "Contact Person"))
+
+        try:
+            self._select_mat_option_by_text(self.PREFERRED_PAYMENT_METHOD, data.get("preferred_payment_method", "Cash"))
+        except Exception:
+            pass
+
+        # Tax Registration Status — triggers Gst Registration Type + Registration Number
+        try:
+            self.page.locator(self.TAX_REGISTRATION_STATUS).wait_for(state="visible", timeout=8000)
+            self._select_mat_option_by_text(self.TAX_REGISTRATION_STATUS, data.get("tax_registration_status", "Registered"))
+            self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        try:
+            self._select_mat_option_by_text(self.GST_REGISTRATION_TYPE, data.get("gst_registration_type", "Regular"))
+            self.page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+        for sel, key, default in [
+            (self.PAYMENT_TERMS,   "payment_terms",   "Immediate"),
+            (self.MODE_OF_DELIVERY,"mode_of_delivery","Air"),
+            (self.DELIVERY_TERMS,  "delivery_terms",  "Spot"),
+            (self.COURIER_TERMS,   "courier_terms",   "Paid"),
         ]:
             try:
-                self._select_mat_option(sel)
+                self.page.locator(sel).wait_for(state="visible", timeout=5000)
+                self._select_mat_option_by_text(sel, data.get(key, default))
                 self.page.wait_for_timeout(200)
             except Exception:
                 pass
 
-        # Page 2 — Address Details
+        # ── Step 2: Address Details ───────────────────────────────────────
         self._click_next()
-        self._fill_address_row(0, data.get("address1", "101 Shivaji Path Pune"), data.get("gstin1", "29ABCDE1234F1Z5"), address_type="Shipping")
-        # Add second row before filling it
-        self.page.evaluate("""
-            var btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().toLowerCase().includes('add row'));
-            if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
-        """)
-        self.page.wait_for_timeout(800)
-        self._fill_address_row(1, data.get("address2", "123 Laxmi Nagar Kolhapur"), data.get("gstin2", "27ABCDE1234F1Z3"), address_type="Billing")
+        self._fill_address_row(0, data.get("address1", "101 Shivaji Path Pune"), address_type="Shipping")
 
-        # Page 3 — Customer Bank Details
+        # Add billing row
+        self.page.locator("button.add-row-btn").first.click()
+        self.page.wait_for_timeout(1000)
+
+        # Billing row — set type then Same as Above
+        self._select_mat_option_by_text(self.ADDR_ADDRESS_TYPE, "Billing", nth=1)
+        self.page.wait_for_timeout(1500)
+        self.page.evaluate("""
+            const matches = [...document.querySelectorAll('mat-checkbox .mdc-label')]
+                .filter(lbl => lbl.textContent.trim().includes('Same as Above'));
+            const target = matches[1] || matches[0];
+            if (target) target.click();
+        """)
+        self.page.wait_for_timeout(500)
+
+        # ── Step 3: Bank Details ─────────────────────────────────────────
         self._click_next()
         for selector, key, default in [
             (self.BANK_NAME_INPUT, "bank_name",    "HDFC Bank"),
             (self.BANK_BRANCH,     "bank_branch",  "Pune Branch"),
-            (self.BANK_IFSC,       "bank_ifsc",    "BARB0696379"),
-            (self.BANK_HOLDER_NAME,"bank_holder",  "High Street Mart"),
-            (self.BANK_ACCOUNT_NO, "bank_account", "964770974496"),
+            (self.BANK_IFSC,       "bank_ifsc",    "SBIN0138644"),
+            (self.BANK_HOLDER_NAME,"bank_holder",  "Account Holder"),
+            (self.BANK_ACCOUNT_NO, "bank_account", "164831834232"),
         ]:
-            loc = self.page.locator(selector).first
-            loc.click(force=True)
-            loc.fill(data.get(key, default))
-            loc.press("Tab")
-        self._select_mat_option(self.BANK_ACCOUNT_TYPE)
-        self._select_mat_option(self.BANK_PROOF)
+            self._fill_text(selector, data.get(key, default))
+
+        self._select_mat_option_by_text(self.BANK_ACCOUNT_TYPE, data.get("account_type", "Saving"))
+        self._select_mat_option_by_text(self.BANK_PROOF, data.get("bank_proof", "Cancelled Cheque"))
         self._clear_overlays()
 
     def submit(self):

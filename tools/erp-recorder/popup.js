@@ -178,11 +178,206 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   });
 });
 
+// ── Page-object generator ─────────────────────────────────────────────────
+
+function toConstName(label) {
+  return label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function toDataKey(label) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// Cascading dropdowns: after selecting one of these, the next field needs a wait_for
+const CASCADE_TRIGGERS = new Set(['State', 'Country', 'District', 'Taluka', 'Village']);
+
+function generatePageObject(steps) {
+  if (!steps.length) return '# No steps recorded yet.';
+
+  // Module name + URL from navigate step
+  let moduleName = 'Module';
+  let url = '';
+  const navStep = steps.find(s => s.type === 'navigate');
+  if (navStep) {
+    url = navStep.label || '';
+    const m = url.match(/\/([^/?#]+)(?:[/?#]|$)/g);
+    if (m && m.length) {
+      moduleName = m[m.length - 1].replace(/[^a-zA-Z0-9]/g, '') || 'Module';
+    }
+  }
+
+  // Collect unique fields in recording order (first occurrence wins)
+  const fieldSteps = [];
+  const constMap   = {};   // label → CONST_NAME
+  const seen        = new Set();
+  for (const s of steps) {
+    if (!s.label) continue;
+    if (s.type !== 'select' && s.type !== 'input') continue;
+    if (seen.has(s.label)) continue;
+    seen.add(s.label);
+    const name = toConstName(s.label);
+    constMap[s.label] = name;
+    fieldSteps.push({ ...s, constName: name });
+  }
+
+  // Constants block
+  const constLines = fieldSteps.map(s => {
+    const tag      = s.type === 'select' ? 'mat-select' : 'input';
+    const escaped  = s.label.replace(/'/g, "\\'");
+    const padded   = s.constName.padEnd(26);
+    return `    ${padded}= "xpath=//mat-form-field[.//mat-label[normalize-space(.)='${escaped}']]//${tag}"`;
+  });
+
+  // fill_form body — walk steps in order, emit helper calls
+  const formLines = [];
+  for (let i = 0; i < steps.length; i++) {
+    const s    = steps[i];
+    const next = steps[i + 1];
+
+    if (s.type === 'select' && constMap[s.label]) {
+      const val = (s.value || '').replace(/"/g, '\\"');
+      const key = toDataKey(s.label);
+      formLines.push(`        self._select_mat_option_by_text(self.${constMap[s.label]}, data.get("${key}", "${val}"))`);
+      // Add wait_for if this is a cascade trigger and the next step is a select
+      if (CASCADE_TRIGGERS.has(s.label) && next && next.type === 'select' && constMap[next.label]) {
+        formLines.push(`        self.page.locator(self.${constMap[next.label]}).nth(0).wait_for(state="visible", timeout=10000)`);
+      }
+    } else if (s.type === 'input' && constMap[s.label]) {
+      const val = (s.value || '').replace(/"/g, '\\"');
+      const key = toDataKey(s.label);
+      formLines.push(`        self._fill_text(self.${constMap[s.label]}, data.get("${key}", "${val}"))`);
+    } else if (s.type === 'button' && s.code && s.code.includes('matsteppernext')) {
+      formLines.push(`        self._click_next()`);
+    }
+  }
+
+  const lines = [
+    `import random`,
+    `from pages.base_playwright_page import BasePlaywrightPage`,
+    ``,
+    ``,
+    `class ${moduleName}Page(BasePlaywrightPage):`,
+    `    URL = "${url}"`,
+    ``,
+    `    # ── Selectors ─────────────────────────────────────────────────────────`,
+    `    SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"`,
+    `    CANCEL_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"`,
+    `    SEARCH_INPUT = "#erpSearchInput"`,
+    ``,
+    ...constLines,
+    ``,
+    `    # ── mat-select helpers (proven pattern — copy exactly, do not simplify) ──`,
+    `    def _select_mat_option_by_text(self, selector, text, nth=0):`,
+    `        self.page.locator(selector).nth(nth).click(force=True)`,
+    `        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)`,
+    `        options = self.page.locator(`,
+    `            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"`,
+    `        ).filter(has_text=text)`,
+    `        matched = None`,
+    `        for opt in options.all():`,
+    `            if opt.inner_text().strip() == text:`,
+    `                matched = opt`,
+    `                break`,
+    `        if matched:`,
+    `            matched.click(force=True)`,
+    `        else:`,
+    `            self.page.locator(".mat-mdc-select-panel mat-option").filter(has_text=text).first.click(force=True)`,
+    `        try:`,
+    `            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)`,
+    `        except Exception:`,
+    `            pass`,
+    `        self.page.wait_for_timeout(300)`,
+    ``,
+    `    def _select_random_mat_option(self, selector, nth=0):`,
+    `        self.page.locator(selector).nth(nth).click(force=True)`,
+    `        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)`,
+    `        options = self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").all()`,
+    `        if options:`,
+    `            random.choice(options).click(force=True)`,
+    `        try:`,
+    `            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)`,
+    `        except Exception:`,
+    `            pass`,
+    `        self.page.wait_for_timeout(500)`,
+    ``,
+    `    def _try_select_random_mat_option(self, selector, nth=0):`,
+    `        self.page.locator(selector).nth(nth).click(force=True)`,
+    `        try:`,
+    `            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)`,
+    `        except Exception:`,
+    `            return`,
+    `        options = self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").all()`,
+    `        if options:`,
+    `            random.choice(options).click(force=True)`,
+    `        try:`,
+    `            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)`,
+    `        except Exception:`,
+    `            pass`,
+    `        self.page.wait_for_timeout(300)`,
+    ``,
+    `    def _fill_text(self, selector, value, nth=0):`,
+    `        loc = self.page.locator(selector).nth(nth)`,
+    `        loc.click(force=True)`,
+    `        loc.fill(str(value))`,
+    `        loc.press("Tab")`,
+    ``,
+    `    def _click_next(self):`,
+    `        self.page.evaluate("""`,
+    `            const btns = document.querySelectorAll('button[matsteppernext]');`,
+    `            for (const btn of btns) {`,
+    `                if (btn.offsetParent !== null && getComputedStyle(btn).display !== 'none') {`,
+    `                    btn.scrollIntoView({block: 'center'});`,
+    `                    btn.click();`,
+    `                    break;`,
+    `                }`,
+    `            }`,
+    `        """)`,
+    `        self.page.wait_for_timeout(1000)`,
+    ``,
+    `    def _clear_overlays(self):`,
+    `        self.page.evaluate("document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove())")`,
+    ``,
+    `    # ── Form ──────────────────────────────────────────────────────────────`,
+    `    def fill_form(self, data):`,
+    ...formLines,
+    ``,
+    `    def submit(self):`,
+    `        self._clear_overlays()`,
+    `        self.page.click(self.SUBMIT_BTN)`,
+    ``,
+    `    def open_add_form(self):`,
+    `        self.page.locator("button.erp-add-btn").click()`,
+    `        self.page.wait_for_timeout(1500)`,
+    ``,
+    `    def navigate_to_page(self):`,
+    `        self.page.goto(self.URL)`,
+    `        self.page.wait_for_selector("table#excel-table", timeout=15000)`,
+    ``,
+    `    def create_record(self, data):`,
+    `        self.open_add_form()`,
+    `        self.fill_form(data)`,
+    `        self.submit()`,
+    `        self.handle_success_alert()`,
+    `        self.navigate_to_page()`,
+  ];
+
+  return lines.join('\n');
+}
+
 document.getElementById('btn-copy').addEventListener('click', () => {
   navigator.clipboard.writeText(generateCode(currentSteps)).then(() => {
     const btn = document.getElementById('btn-copy');
     btn.textContent = 'Copied!'; btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
+document.getElementById('btn-gen-po').addEventListener('click', () => {
+  const code = generatePageObject(currentSteps);
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('btn-gen-po');
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Page Obj'; btn.classList.remove('copied'); }, 1800);
   });
 });
 

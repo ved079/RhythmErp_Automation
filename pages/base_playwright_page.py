@@ -68,6 +68,37 @@ class BasePlaywrightPage:
     def get_table_row_count(self):
         return self.page.locator("table#excel-table tbody tr").count()
 
+    def set_page_size(self, size: str):
+        """Set the paginator page-size dropdown so all records are visible."""
+        self.page.locator("mat-paginator mat-select").click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        )
+        matched = None
+        for opt in options.all():
+            if opt.inner_text().strip() == size:
+                matched = opt
+                break
+        if matched:
+            matched.click(force=True)
+        else:
+            options.filter(has_text=size).first.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(1000)
+
+    def read_table_data(self, col_indices: list) -> list:
+        """Return list of tuples — one per tbody row — for the given column indices."""
+        rows = self.page.locator("table#excel-table tbody tr")
+        result = []
+        for i in range(rows.count()):
+            cells = rows.nth(i).locator("td")
+            result.append(tuple(cells.nth(c).text_content().strip() for c in col_indices))
+        return result
+
     def search_entry(self, value):
         search_input = self.page.locator("input#erpSearchInput")
         if not search_input.is_visible():
@@ -110,6 +141,16 @@ class BasePlaywrightPage:
         self.force_close_popup()
         self.page.wait_for_timeout(500)
         return count
+
+    def get_row_field_value(self, row_index, field_label):
+        """Open View on row_index, read a field value, close popup."""
+        self.click_row_action(row_index, "View")
+        selector = f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input"
+        self.page.wait_for_selector(selector, timeout=8000)
+        value = self.page.locator(selector).first.input_value()
+        self.force_close_popup()
+        self.page.wait_for_timeout(500)
+        return value
 
     def bulk_edit_field(self, record_name, field_label, values):
         """Apply each value in sequence via edit → update, without reading history in between.
