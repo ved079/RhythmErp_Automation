@@ -71,9 +71,9 @@ class TestSupplierEditAndHistory:
         supplier_page.search_supplier(data["company_name"])
         supplier_page.verify_supplier_exists(data["company_name"])
 
-        # 2. History after create — must be empty
+        # 2. History after create — ERP logs the creation event, so expect exactly 1 row
         history_before = supplier_page.get_history_entry_count(data["company_name"])
-        assert history_before == 0, f"Expected empty history after create, got {history_before} rows"
+        assert history_before == 1, f"Expected 1 history row after create (creation event), got {history_before}"
 
         # 3. Edit contact person
         updated_contact = "Updated Contact Person"
