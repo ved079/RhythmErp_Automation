@@ -1125,6 +1125,11 @@ window.__erpRecorderInjected = true;
     const lbl = (cb.querySelector('.mdc-label') || cb).textContent.trim();
     if (!lbl) return;
     const safeLbl = lbl.replace(/'/g, "\\'");
+    // Determine which occurrence of this label was clicked (for nth() in generated code)
+    const allSame = [...document.querySelectorAll('mat-checkbox')]
+      .filter(c => (c.querySelector('.mdc-label') || c).textContent.trim() === lbl);
+    const nth = allSame.indexOf(cb);
+    const nthSuffix = nth > 0 ? `.nth(${nth})` : '';
     // Read state after Angular's change-detection tick: use native input.checked
     // (the most reliable source — mdc-checkbox--selected and mat-mdc-checkbox-checked
     // classes lag behind and can be inverted relative to visual state).
@@ -1133,9 +1138,9 @@ window.__erpRecorderInjected = true;
       const checked = nativeInp ? nativeInp.checked : cb.classList.contains('mat-mdc-checkbox-checked');
       addStep({
         type: 'button',
-        label: lbl,
+        label: nth > 0 ? `${lbl} [${nth}]` : lbl,
         value: checked ? 'checked' : 'unchecked',
-        code: `page.locator("mat-checkbox:has-text('${safeLbl}') .mdc-label").click()`
+        code: `page.locator("mat-checkbox:has-text('${safeLbl}') .mdc-label")${nthSuffix}.click()`
       });
     }, 50);
   }, true);
