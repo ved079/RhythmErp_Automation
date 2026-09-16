@@ -273,6 +273,10 @@ window.__erpRecorderInjected = true;
     if (['select', 'input', 'button', 'swal2', 'navigate', 'start'].includes(step.type)) {
       lastAction = step;
     }
+    // Kick off history row-count watch whenever a History menu item is recorded
+    if (step.type === 'button' && /\bhistory\b/i.test(step.label)) {
+      _startHistoryWatch();
+    }
     // Toast feedback for every recorded step
     const toastMsg = (() => {
       switch (step.type) {
@@ -1270,33 +1274,39 @@ window.__erpRecorderInjected = true;
   }, true);
 
   // ── History dialog row-count capture ─────────────────────────────
-  // When a .cdk-overlay-pane opens containing table#excel-table (history popup),
-  // read the current row count and emit an assertion step.
-  const historyPaneMO = new MutationObserver(muts => {
-    if (!recording) return;
-    for (const m of muts) {
-      for (const node of m.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        if (!node.classList?.contains('cdk-overlay-pane')) continue;
-        setTimeout(() => {
-          const empty = node.querySelector('.empty-state');
-          const rows  = node.querySelectorAll('table#excel-table tbody tr');
-          if (!empty && rows.length === 0) return; // not a history/list dialog
-          const count = rows.length;
-          const code = empty
-            ? `# history: empty\nassert page.locator(".empty-state").is_visible()`
-            : `# history: ${count} row(s)\nassert page.locator("table#excel-table tbody tr").count() == ${count}`;
-          addStep({
-            type: 'readonly',
-            label: 'History rows',
-            value: empty ? '0 (empty)' : String(count),
-            code
-          });
-        }, 600);
+  // Triggered when a "History" button is recorded. Polls the overlay area
+  // (any .cdk-overlay-pane or .mat-mdc-dialog-container added after the click)
+  // every 200ms up to 4 s for table#excel-table rows or .empty-state.
+  let _historyWatchTimer = null;
+  function _startHistoryWatch() {
+    clearInterval(_historyWatchTimer);
+    let tries = 0;
+    _historyWatchTimer = setInterval(() => {
+      tries++;
+      // Search inside any overlay / dialog container that is NOT the main page
+      const dialogs = document.querySelectorAll(
+        '.cdk-overlay-pane, .mat-mdc-dialog-container, .mat-dialog-container'
+      );
+      for (const dlg of dialogs) {
+        const empty = dlg.querySelector('.empty-state');
+        const rows  = dlg.querySelectorAll('table#excel-table tbody tr');
+        if (!empty && rows.length === 0) continue;
+        clearInterval(_historyWatchTimer);
+        const count = rows.length;
+        const code = empty
+          ? `# history: empty\nassert page.locator(".empty-state").is_visible()`
+          : `# history: ${count} row(s)\nassert page.locator("table#excel-table tbody tr").count() == ${count}`;
+        addStep({
+          type: 'readonly',
+          label: 'History rows',
+          value: empty ? '0 (empty)' : String(count),
+          code
+        });
+        return;
       }
-    }
-  });
-  historyPaneMO.observe(document.body, { childList: true, subtree: true });
+      if (tries >= 20) clearInterval(_historyWatchTimer); // 4 s timeout
+    }, 200);
+  }
 
   // ── tracking-card detection ───────────────────────────────────────
   const trackMO = new MutationObserver(muts => {
