@@ -299,6 +299,43 @@ class SupplierPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         return pan
 
+    def get_history_entry_count(self, company_name):
+        """Open History for company_name, return row count, then close."""
+        self.click_row_action(self._find_row_index(company_name), "History")
+        self.page.wait_for_timeout(1000)
+        count = self.page.locator("table tbody tr").count()
+        self.force_close_popup()
+        self.page.wait_for_timeout(500)
+        return count
+
+    def get_view_field_value(self, company_name, field_label):
+        """Open View for company_name, read field value, close popup."""
+        self.click_row_action(self._find_row_index(company_name), "View")
+        self.page.wait_for_selector(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input",
+            timeout=8000
+        )
+        value = self.page.locator(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input"
+        ).input_value()
+        self.force_close_popup()
+        self.page.wait_for_timeout(500)
+        return value
+
+    def edit_field_and_update(self, company_name, field_label, new_value):
+        """Open Edit for company_name, update one text field, submit."""
+        self.click_row_action(self._find_row_index(company_name), "Edit")
+        self.page.wait_for_selector(self.COMPANY_NAME, timeout=8000)
+        loc = self.page.locator(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input"
+        ).first
+        loc.click(click_count=3)
+        loc.fill(new_value)
+        loc.press("Tab")
+        self.page.locator(self.UPDATE_BTN).click()
+        self.handle_success_alert()
+        self.navigate_to_page()
+
     def click_view_button(self, company_name):
         self.click_row_action(self._find_row_index(company_name), "View")
 
