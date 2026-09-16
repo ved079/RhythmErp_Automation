@@ -1015,7 +1015,9 @@ window.__erpRecorderInjected = true;
     const cls = btn.className || '';
     if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true;
     if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true;
-    if (cls.includes('erp-row-trigger') || cls.includes('erp-outline-btn')) return true;
+    if (cls.includes('erp-row-trigger')) return true;
+    if (cls.includes('erp-outline-btn')) return true; // row action OR header toolbar btn
+    if (cls.includes('page-nav-btn') || cls.includes('page-num-btn')) return true;
     if (btn.querySelector('.erp-menu-title')) return true;
     if (btn.matches('button[mattooltip="Search"], button[matTooltip="Search"]')) return true;
     if (btn.closest('.erp-search-container')) return true;
@@ -1060,10 +1062,10 @@ window.__erpRecorderInjected = true;
         .map(i => i.closest('button')).indexOf(btn);
       return { label: 'Remove row', code: `page.locator("button.apply-button").nth(${idx}).click()` };
     }
-    if (cls.includes('erp-row-trigger') || cls.includes('erp-outline-btn')) {
-      // ⋮ row action menu — prefer a ref-no scoped locator (suite's
-      // _open_row_action / tr:has-text) so replay targets the same record
-      // even if row order/index changes; fall back to .nth(row_index).
+    if (cls.includes('erp-row-trigger') ||
+        (cls.includes('erp-outline-btn') && btn.closest('td'))) {
+      // ⋮ row action menu — prefer a ref-no scoped locator so replay targets the
+      // same record even if row order changes; fall back to .nth(row_index).
       const btnSel = cls.includes('erp-outline-btn') ? 'button.erp-outline-btn' : 'button.erp-row-trigger';
       const row = btn.closest('tr');
       const refCell = row && row.querySelector(
@@ -1079,6 +1081,37 @@ window.__erpRecorderInjected = true;
         code = `page.locator("${btnSel}").nth(${idx}).click()\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
       }
       return { label: 'Row menu', code };
+    }
+    if (cls.includes('erp-outline-btn') && !btn.closest('td')) {
+      // Header toolbar button (Filters, Refresh, more_vert app-menu, etc.)
+      // Prefer mattooltip for a stable, readable locator; fall back to icon name.
+      const tooltip = btn.getAttribute('mattooltip') || btn.getAttribute('aria-label') || '';
+      const icon = btn.querySelector('.material-icons')?.textContent.trim() || '';
+      const label = tooltip || icon || 'Toolbar button';
+      let sel, extraCode = '';
+      if (tooltip) {
+        sel = `button[mattooltip='${tooltip.replace(/'/g, "\\'")}']`;
+      } else {
+        const idx = [...document.querySelectorAll('button.erp-outline-btn')].indexOf(btn);
+        sel = `button.erp-outline-btn:nth-of-type(${idx + 1})`;
+      }
+      if (btn.classList.contains('mat-mdc-menu-trigger')) {
+        extraCode = `\npage.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)`;
+      }
+      return { label, code: `page.locator("${sel}").click()${extraCode}` };
+    }
+    if (cls.includes('page-nav-btn') || cls.includes('page-num-btn')) {
+      // Paginator navigation buttons
+      const icon = btn.querySelector('.material-icons')?.textContent.trim() || '';
+      const pageNum = btn.textContent.trim();
+      const label = icon === 'first_page' ? 'First page'
+                  : icon === 'last_page'  ? 'Last page'
+                  : icon === 'chevron_left'  ? 'Previous page'
+                  : icon === 'chevron_right' ? 'Next page'
+                  : `Page ${pageNum}`;
+      const sel = icon ? `button.page-nav-btn:has(.material-icons:text-is("${icon}"))`
+                       : `button.page-num-btn:has-text("${pageNum}")`;
+      return { label, code: `page.locator("${sel}").click()` };
     }
     if (btn.querySelector('.erp-menu-title')) {
       // Edit / View / History / … from the action menu (suite: :has(.erp-menu-title:text-is('…')))
