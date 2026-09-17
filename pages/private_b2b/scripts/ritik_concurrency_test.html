@@ -372,7 +372,7 @@
 </div>
 
 <script>
-const FASTAPI = 'http://localhost:8000'
+const FASTAPI = 'http://localhost:4000'
 
 const STEPS = [
   { key: 'INPUT_VALIDATION',                 label: 'Validation'   },
@@ -438,7 +438,7 @@ async function handleRun() {
   abortCtrl = new AbortController()
 
   try {
-    const res = await fetch(`${FASTAPI}/pb-concurrency-test`, {
+    const res = await fetch(`${FASTAPI}/api/pb-concurrency-test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ erp_token: token, erp_tenant_id: '666', parallel_count: parallelN }),
