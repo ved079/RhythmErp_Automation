@@ -34,6 +34,8 @@ window.__erpRecorderInjected = true;
 
   // Red-line validation error messages already recorded (mat-error / red-line)
   const recordedErrors = new Set();
+  // Steps for which a "no errors" comment has already been emitted
+  const commentedSteps = new Set();
 
   // Last user action (select/input/button/…) — post-step snapshots of
   // auto-patched readonly fields are grouped under it ("step-wise" output)
@@ -186,10 +188,7 @@ window.__erpRecorderInjected = true;
   document.getElementById('__erp_rec_view').addEventListener('click', e => {
     e.stopPropagation();
     try {
-      const url = chrome.runtime.getURL('fullview.html');
       chrome.runtime.sendMessage({ type: 'OPEN_FULLVIEW' });
-      const w = window.open(url, '_blank');
-      if (w) w.focus();
     } catch (_) {}
   });
   document.getElementById('__erp_rec_min').addEventListener('click', e => {
@@ -255,6 +254,7 @@ window.__erpRecorderInjected = true;
     steps = []; pendingSelect = null;
     viewMode = false;
     recordedErrors.clear();
+    commentedSteps.clear();
     recordedReadonly.clear();
     pendingViewCaptures.clear();
     setBarState(); persist();
@@ -437,22 +437,36 @@ window.__erpRecorderInjected = true;
     return { label, row };
   }
 
-  function errorStepFor(field) {
+  function errorStepFor(field, stepLabel) {
     const isInvalid =
       field.classList.contains('mat-form-field-invalid') ||
       field.classList.contains('ng-invalid');
     if (!isInvalid) return null;
+    // Only capture errors the user has actually seen — field must be touched/dirty
+    // (Angular sets ng-touched on blur or after form submit, ng-dirty on value change)
+    const isTouched =
+      field.classList.contains('ng-touched') ||
+      field.classList.contains('ng-dirty');
+    if (!isTouched) return null;
     const errEl = field.querySelector('mat-error');
-    if (!errEl) return null;
+    const { label, row } = fieldContext(field);
+    const stepPrefix = stepLabel ? `[${stepLabel}] ` : '';
+    const where = label
+      ? row ? `${stepPrefix}"${label}" (row ${row})` : `${stepPrefix}"${label}"`
+      : row ? `${stepPrefix}row ${row}` : `${stepPrefix}unknown field`;
+    const labelEsc = label ? label.replace(/'/g, "\\'") : null;
+
+    if (!errEl) {
+      // Field is invalid but has no mat-error text (e.g. required mat-select with only red border)
+      if (!label) return null;
+      const code = `# Validation error — ${where}: no error text (ng-invalid)\nassert page.locator("xpath=//mat-form-field[contains(@class,'ng-invalid') and .//mat-label[contains(.,'${labelEsc}')]]").count() > 0`;
+      return { type: 'error', label: where, value: 'ng-invalid', code };
+    }
+
     let msg = (errEl.textContent || '').trim().replace(/\s+/g, ' ');
     if (!msg || msg.length > 200) return null;
 
-    const { label, row } = fieldContext(field);
-    const where = label
-      ? row ? `"${label}" (row ${row})` : `"${label}"`
-      : row ? `row ${row}` : 'unknown field';
     const msgEsc = msg.replace(/'/g, "\\'");
-    const labelEsc = label ? label.replace(/'/g, "\\'") : null;
 
     let code;
     if (label) {
@@ -464,19 +478,87 @@ window.__erpRecorderInjected = true;
     return { type: 'error', label: where, value: msg, code };
   }
 
+  // Returns the active stepper step's content element, or null if no stepper.
+  function getActiveStepContent() {
+    const activeHeader = document.querySelector('mat-step-header[aria-selected="true"]');
+    if (!activeHeader) return null;
+    const contentId = activeHeader.getAttribute('aria-controls');
+    if (contentId) {
+      const panel = document.getElementById(contentId);
+      if (panel) return panel;
+    }
+    return null;
+  }
+
+  // Returns the label of the active step for annotating recorded errors.
+  function getActiveStepLabel() {
+    const activeHeader = document.querySelector('mat-step-header[aria-selected="true"]');
+    if (!activeHeader) return null;
+    return (
+      activeHeader.querySelector('.step-title')?.textContent?.trim() ||
+      activeHeader.querySelector('.mat-step-text-label')?.textContent?.trim() ||
+      null
+    );
+  }
+
   function scanFormErrors() {
     if (!recording) return;
+    const activeContent = getActiveStepContent();
+    const stepLabel = activeContent ? getActiveStepLabel() : null;
+
+    // All stepper content panels (to identify which fields are inside a stepper)
+    const allStepPanels = [...document.querySelectorAll(
+      '.mat-horizontal-content-container > .mat-horizontal-stepper-content, ' +
+      '.mat-vertical-content-container > .mat-vertical-stepper-content, ' +
+      '[id^="cdk-stepper-"]'
+    )];
+
     const ffs = document.querySelectorAll('mat-form-field, .mat-mdc-form-field');
     for (const field of ffs) {
       if (!field.isConnected) continue;
-      const step = errorStepFor(field);
-      if (!step) continue;
-      // Dedup per field+message (grid rows sharing a label each count, so
-      // we know exactly which row must be fixed)
-      const key = `${step.label}:${step.value}`;
-      if (recordedErrors.has(key)) continue;
-      recordedErrors.add(key);
-      addStep(step);
+      if (field.offsetParent === null) continue;
+
+      // Is this field inside any stepper content panel?
+      const insideStepPanel = activeContent
+        ? allStepPanels.some(p => p.contains(field))
+        : false;
+
+      if (insideStepPanel) {
+        // Only capture if in the ACTIVE step panel
+        if (!activeContent.contains(field)) continue;
+        const step = errorStepFor(field, stepLabel);
+        if (!step) continue;
+        const key = `${step.label}:${step.value}`;
+        if (recordedErrors.has(key)) continue;
+        recordedErrors.add(key);
+        addStep(step);
+      } else {
+        // Universal block — always visible, label it as such
+        const step = errorStepFor(field, 'Universal');
+        if (!step) continue;
+        const key = `${step.label}:${step.value}`;
+        if (recordedErrors.has(key)) continue;
+        recordedErrors.add(key);
+        addStep(step);
+      }
+    }
+
+    // If we're on the last stepper step (no Next button) and it has no errors,
+    // emit a "no errors" comment once so the output is consistent with middle steps.
+    if (activeContent && stepLabel) {
+      const isLastStep = !document.querySelector('button[matsteppernext]');
+      if (isLastStep) {
+        const hasStepErrors = [...recordedErrors].some(k => k.startsWith(`[${stepLabel}]`));
+        if (!hasStepErrors && !commentedSteps.has(stepLabel)) {
+          commentedSteps.add(stepLabel);
+          addStep({
+            type: 'comment',
+            label: `No validation errors on [${stepLabel}]`,
+            value: stepLabel,
+            code: `# No validation errors on [${stepLabel}] — all fields optional`
+          });
+        }
+      }
     }
   }
 
@@ -1169,9 +1251,17 @@ window.__erpRecorderInjected = true;
     if (btn.hasAttribute('matstepperprevious') || btn.hasAttribute('matsteppernext')) {
       const lbl = (btn.querySelector('.mdc-button__label') || btn).textContent.trim();
       const attr = btn.hasAttribute('matstepperprevious') ? 'matstepperprevious' : 'matsteppernext';
+      const currentStep = getActiveStepLabel ? getActiveStepLabel() : null;
+      const hasStepErrors = currentStep
+        ? [...recordedErrors].some(k => k.startsWith(`[${currentStep}]`))
+        : false;
+      const comment = (currentStep && !hasStepErrors)
+        ? `# No validation errors on [${currentStep}] — all fields optional\n`
+        : '';
       return {
         label: lbl,
-        code: `page.locator("button[${attr}]").click()`
+        value: currentStep ? `${lbl}:${currentStep}` : lbl,
+        code: `${comment}page.locator("button[${attr}]").click()`
       };
     }
     return { label: text, code: `page.get_by_role("button", name="${text}").click()` };
@@ -1189,7 +1279,7 @@ window.__erpRecorderInjected = true;
     if (viewMode && /^(close|cancel)$/i.test(b.label)) {
       exitViewMode();
     }
-    addStep({ type: 'button', label: b.label, value: b.label, code: b.code });
+    addStep({ type: 'button', label: b.label, value: b.value !== undefined ? b.value : b.label, code: b.code });
   }
 
   // focusin on a field → keyboard users (Tab reaches a readonly/disabled
@@ -1460,6 +1550,7 @@ window.__erpRecorderInjected = true;
     pendingSelect = null;
     exitViewMode(); // navigating away always exits view mode
     recordedErrors.clear();
+    commentedSteps.clear();
     recordedReadonly.clear(); // new page → readonly values must be re-asserted
     addStep({
       type: 'navigate',
@@ -1497,6 +1588,7 @@ window.__erpRecorderInjected = true;
     } else if (msg.type === 'RESTART') {
       steps = []; pendingSelect = null;
       recordedErrors.clear();
+      commentedSteps.clear();
       recordedReadonly.clear();
       recording = true;
       setBarState(); persist();
