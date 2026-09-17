@@ -389,8 +389,49 @@ class CustomerPage(BasePlaywrightPage):
         self.page.locator(self.COMPANY_NAME).first.click(click_count=3)
         self.page.locator(self.COMPANY_NAME).first.fill(new_value)
 
+    UPDATE_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
+
     def click_update(self):
-        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
+        self.page.locator(self.UPDATE_BTN).click()
+
+    def get_first_customer_pan(self):
+        self.click_row_action(0, "View")
+        self.page.wait_for_selector(
+            "xpath=//mat-label[contains(.,'PAN Number')]/ancestor::mat-form-field//input",
+            timeout=8000,
+        )
+        pan = self.page.locator(
+            "xpath=//mat-label[contains(.,'PAN Number')]/ancestor::mat-form-field//input"
+        ).input_value()
+        self.page.locator(self.CANCEL_BTN).click()
+        self.page.wait_for_timeout(500)
+        return pan
+
+    def get_view_field_value(self, company_name, field_label):
+        self.click_row_action(self._find_row_index(company_name), "View")
+        self.page.wait_for_selector(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input",
+            timeout=8000,
+        )
+        value = self.page.locator(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input"
+        ).input_value()
+        self.force_close_popup()
+        self.page.wait_for_timeout(500)
+        return value
+
+    def edit_field_and_update(self, company_name, field_label, new_value):
+        self.click_row_action(self._find_row_index(company_name), "Edit")
+        self.page.wait_for_selector(self.COMPANY_NAME, timeout=8000)
+        loc = self.page.locator(
+            f"xpath=//mat-label[contains(.,'{field_label}')]/ancestor::mat-form-field//input"
+        ).first
+        loc.click(click_count=3)
+        loc.fill(new_value)
+        loc.press("Tab")
+        self.page.locator(self.UPDATE_BTN).click()
+        self.handle_success_alert()
+        self.navigate_to_page()
 
     def click_history_button(self, company_name):
         self.click_row_action(self._find_row_index(company_name), "History")
@@ -401,3 +442,12 @@ class CustomerPage(BasePlaywrightPage):
         texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]
         assert "Submit" not in texts and "Update" not in texts, \
             "View popup must not have Submit or Update"
+
+    def export_master(self):
+        self.page.locator("button.mat-mdc-menu-trigger.erp-outline-btn").click()
+        self.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        with self.page.expect_download() as dl:
+            self.page.locator(
+                ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('Export Master'))"
+            ).click()
+        return dl.value
