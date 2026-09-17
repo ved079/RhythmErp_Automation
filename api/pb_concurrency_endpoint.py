@@ -99,6 +99,16 @@ def pb_concurrency_stream(request: PBConcurrencyTestRequest) -> Generator[str, N
             chain._item_category_map = {ctx.item_ref_id: ctx.item_type_ref_id}
             chain._tax_rates = {str(ctx.hsn_sac_no): [1.0]}
             chain._cqp_cache = {ctx.item_ref_id: ctx.quality_parameters}
+            chain._po_defaults = {
+                "po_item_type": ctx.item_type_ref_id,
+                "po_type": ctx.po_type,
+                "base_currency": ctx.base_currency,
+                "txn_currency": ctx.txn_currency,
+                "parameter1": ctx.parameter1,
+                "parameter2": ctx.parameter2,
+                "parameter5": ctx.parameter5,
+                "parameter6": ctx.parameter6,
+            }
             result = chain.run(num_items=1, documents=["PO", "GP", "GRN", "QC"], ctx=ctx,
                                require_tax_rate=False)
         else:
