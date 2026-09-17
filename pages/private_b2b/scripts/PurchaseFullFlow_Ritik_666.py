@@ -35,13 +35,13 @@ SUPPLIER_SHIP_FROM  = 3108
 SUPPLIER_BILL_FROM  = 3109
 ITEM_REF_ID         = 65      # Preform
 ITEM_TYPE_REF_ID    = 1       # Raw material
-HSN_SAC_NO          = 5
-ALTERNATE_UOM       = 3
-BASE_UOM            = 4
+HSN_SAC_NO          = 4
+ALTERNATE_UOM       = 10
+BASE_UOM            = 10
 PO_TYPE             = 24
 PO_ITEM_TYPE        = 1
 BASE_CURRENCY       = 8
-TXN_CURRENCY        = 66
+TXN_CURRENCY        = 8
 PAYMENT_TERMS       = 549
 DELIVERY_TERMS      = 130
 PACKING_FORWARDING  = 89
@@ -50,14 +50,14 @@ PARAMETER1          = 1
 PARAMETER2          = 1
 PARAMETER5          = 1
 PARAMETER6          = 1
-PB_PAYMENT_TERMS    = 551     # 21 Days
+PB_PAYMENT_TERMS    = 549
 QC_PARAMS           = [4, 7, 11]
 
 # ── Item / PB amounts ─────────────────────────────────────────────────────────
 QTY         = 578.0
 RATE        = 3809.94
 AMOUNT      = round(QTY * RATE, 6)        # 2_202_145.32
-TAX_RATE    = 5.0                          # IGST %
+TAX_RATE    = 1.0                          # IGST %
 IGST        = round(AMOUNT * TAX_RATE / 100.0, 6)   # 110_107.266
 TOTAL       = round(AMOUNT + IGST, 6)     # 2_312_252.586
 
@@ -191,6 +191,7 @@ def run():
         pb_payment_terms   = PB_PAYMENT_TERMS,
         quality_parameters = [{"item_quality_parameter_ref_id": p, "actual_value": 1} for p in QC_PARAMS],
     )
+
 
     result = chain.run(documents=["PO", "GP", "GRN", "QC"])
     po_id  = (result.get("po") or {}).get("id")
