@@ -94,6 +94,11 @@ def pb_concurrency_stream(request: PBConcurrencyTestRequest) -> Generator[str, N
                 quality_parameters = [{"item_quality_parameter_ref_id": p, "actual_value": 1} for p in [4, 7, 11]],
             )
             ctx = chain._context
+            # Pre-warm internal caches so run() skips all ERP discovery calls
+            chain._categories = [{"id": ctx.item_type_ref_id, "name": "Raw material", "item_count": 1}]
+            chain._item_category_map = {ctx.item_ref_id: ctx.item_type_ref_id}
+            chain._tax_rates = {str(ctx.hsn_sac_no): [1.0]}
+            chain._cqp_cache = {ctx.item_ref_id: ctx.quality_parameters}
             result = chain.run(num_items=1, documents=["PO", "GP", "GRN", "QC"], ctx=ctx,
                                require_tax_rate=False)
         else:
