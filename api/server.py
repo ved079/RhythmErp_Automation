@@ -51,7 +51,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 app = FastAPI(title="Rhythm ERP Test API", version="3.0.0")
 
 # --- CORS — restricted to frontend URL ---
-_cors_origins = os.getenv("API_CORS_ORIGINS", "http://localhost:3000").split(",")
+_cors_origins = os.getenv("API_CORS_ORIGINS", "http://localhost:3000,*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in _cors_origins],

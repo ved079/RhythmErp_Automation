@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PB Concurrency Test — Tenant 666</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: Inter, system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 24px 20px;
+  }
+
+  h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+  }
+  .subtitle {
+    font-size: 11px;
+    color: #4b5563;
+    margin-top: 2px;
+  }
+
+  /* ── Config bar ── */
+  .config-bar {
+    background: #161b27;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .token-input {
+    flex: 1;
+    min-width: 200px;
+    height: 34px;
+    background: #1e2535;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 0 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-text-security: disc;
+  }
+  .token-input:focus { border-color: #6366f1; }
+  .token-input.valid { border-color: #22c55e; }
+  .token-input.invalid { border-color: #ef4444; }
+
+  .label {
+    font-size: 11px;
+    color: #6b7280;
+    white-space: nowrap;
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #1e2535;
+  }
+  .stepper button {
+    width: 30px;
+    height: 32px;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .stepper button:hover:not(:disabled) { background: #2d3748; color: #fff; }
+  .stepper button:disabled { opacity: 0.3; cursor: not-allowed; }
+  .stepper-val {
+    width: 30px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .run-btn {
+    height: 34px;
+    padding: 0 20px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #6366f1, #818cf8);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 16px rgba(99,102,241,0.35);
+    white-space: nowrap;
+  }
+  .run-btn:hover:not(:disabled) { opacity: 0.9; }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+  .run-btn.running { background: #4b4fcb; box-shadow: none; }
+
+  .token-status {
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: #22c55e; }
+  .dot.red   { background: #ef4444; }
+
+  /* ── Chain strip ── */
+  .chain-strip {
+    background: #161b27;
+    border: 1px solid #2d3748;
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: #9ca3af;
+  }
+  .chain-strip.hidden { display: none; }
+  .doc-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #1e2535;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+  .doc-label { color: #4b5563; font-weight: 700; text-transform: uppercase; font-size: 8px; letter-spacing: 0.05em; }
+  .doc-val   { color: #d1d5db; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── PB panels grid ── */
+  .panels-grid {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .panels-grid.n2 { grid-template-columns: repeat(2, 1fr); }
+  .panels-grid.n3 { grid-template-columns: repeat(3, 1fr); }
+  .panels-grid.n4 { grid-template-columns: repeat(2, 1fr); }
+  .panels-grid.n5, .panels-grid.n6 { grid-template-columns: repeat(3, 1fr); }
+  .panels-grid.n7, .panels-grid.n8, .panels-grid.n9, .panels-grid.n10 { grid-template-columns: repeat(4, 1fr); }
+
+  .pb-panel {
+    background: #0d1117;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .pb-panel.created  { border-color: rgba(34,197,94,0.4); }
+  .pb-panel.rejected { border-color: rgba(245,158,11,0.4); }
+  .pb-panel.error    { border-color: rgba(239,68,68,0.4); }
+  .pb-panel.running  { border-color: rgba(99,102,241,0.3); }
+
+  .pb-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.02);
+    transition: background 0.3s;
+  }
+  .pb-panel.created  .pb-header { background: rgba(34,197,94,0.06); }
+  .pb-panel.rejected .pb-header { background: rgba(245,158,11,0.06); }
+  .pb-panel.error    .pb-header { background: rgba(239,68,68,0.06); }
+  .pb-panel.running  .pb-header { background: rgba(99,102,241,0.04); }
+
+  .pb-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pb-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .badge-idle     { background: rgba(75,85,99,0.4); color: #6b7280; }
+  .badge-firing   { background: rgba(99,102,241,0.15); color: #818cf8; }
+  .badge-created  { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .badge-rejected { background: rgba(245,158,11,0.12); color: #fbbf24; }
+  .badge-error    { background: rgba(239,68,68,0.12); color: #f87171; }
+
+  .pb-id-row {
+    padding: 6px 14px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #9ca3af;
+    display: none;
+  }
+  .pb-id-row.visible { display: block; }
+
+  /* ── Step pipeline ── */
+  .steps { padding: 12px 14px; display: flex; flex-direction: column; gap: 0; }
+  .step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 32px;
+  }
+  .step-row:last-child { min-height: 18px; }
+
+  .step-node-col { display: flex; flex-direction: column; align-items: center; width: 18px; flex-shrink: 0; }
+  .step-dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 2px solid #374151;
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .step-dot.done   { background: #22c55e; border-color: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+  .step-dot.failed { background: #ef4444; border-color: #ef4444; }
+  .step-dot.active { border-color: #6366f1; background: rgba(99,102,241,0.1); }
+  .step-dot svg { width: 10px; height: 10px; }
+
+  .ping-ring {
+    position: absolute; inset: -2px;
+    border-radius: 50%;
+    border: 2px solid #6366f1;
+    animation: ping 1s cubic-bezier(0,0,0.2,1) infinite;
+    opacity: 0;
+  }
+  @keyframes ping {
+    0%   { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  .step-line {
+    width: 1px;
+    flex: 1;
+    min-height: 14px;
+    background: #374151;
+    margin-top: 2px;
+    transition: background 0.4s;
+  }
+  .step-line.done { background: #22c55e; }
+
+  .step-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #4b5563;
+    padding-top: 1px;
+    transition: color 0.3s;
+    flex: 1;
+  }
+  .step-label.done   { color: #4ade80; }
+  .step-label.failed { color: #f87171; }
+  .step-label.active { color: #818cf8; }
+
+  .step-check { font-size: 10px; color: rgba(34,197,94,0.6); padding-top: 1px; flex-shrink: 0; }
+
+  /* ── Result banner ── */
+  .result-banner {
+    margin-top: 12px;
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: none;
+  }
+  .result-banner.visible { display: block; }
+  .result-banner.warn {
+    border: 1px solid rgba(239,68,68,0.3);
+    background: rgba(239,68,68,0.05);
+  }
+  .result-banner.ok {
+    border: 1px solid rgba(34,197,94,0.3);
+    background: rgba(34,197,94,0.05);
+  }
+  .result-title { font-size: 12px; font-weight: 600; }
+  .result-banner.warn .result-title { color: #f87171; }
+  .result-banner.ok   .result-title { color: #4ade80; }
+  .result-sub { font-size: 11px; margin-top: 3px; }
+  .result-banner.warn .result-sub { color: rgba(248,113,113,0.65); }
+  .result-banner.ok   .result-sub { color: rgba(74,222,128,0.55); }
+
+  /* ── Spinner ── */
+  .spin {
+    width: 13px; height: 13px;
+    border: 2px solid rgba(99,102,241,0.3);
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .icon-sm { width: 14px; height: 14px; flex-shrink: 0; }
+
+  .arrow { color: #374151; font-size: 9px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<h1>PB Concurrency Test</h1>
+<div class="subtitle">Tenant 666 · fires N simultaneous Purchase Bookings against the same QC/GRN/PO</div>
+
+<!-- Config bar -->
+<div class="config-bar">
+  <div class="config-row">
+    <input id="tokenInput" class="token-input" type="text" placeholder="Paste JWT token (eyJ…)" autocomplete="off" />
+
+    <span class="label">Parallel</span>
+    <div class="stepper">
+      <button id="decBtn" onclick="changeN(-1)">−</button>
+      <span class="stepper-val" id="nVal">3</span>
+      <button id="incBtn" onclick="changeN(1)">+</button>
+    </div>
+
+    <button id="runBtn" class="run-btn" onclick="handleRun()">
+      <svg class="icon-sm" viewBox="0 0 16 16" fill="white"><path d="M5 3.5l7 4.5-7 4.5V3.5z"/></svg>
+      Run Test
+    </button>
+  </div>
+
+  <div id="tokenStatus" class="token-status" style="display:none"></div>
+</div>
+
+<!-- Chain strip -->
+<div id="chainStrip" class="chain-strip hidden">
+  <div id="chainSpinner" class="spin"></div>
+  <span id="chainText" style="font-size:11px;color:#9ca3af;">Building chain…</span>
+  <span id="chainDocs"></span>
+</div>
+
+<!-- PB panels -->
+<div id="panelsGrid" class="panels-grid" style="display:none"></div>
+
+<!-- Result banner -->
+<div id="resultBanner" class="result-banner">
+  <div class="result-title" id="resultTitle"></div>
+  <div class="result-sub" id="resultSub"></div>
+</div>
+
+<script>
+const FASTAPI = 'http://localhost:8000'
+
+const STEPS = [
+  { key: 'INPUT_VALIDATION',                 label: 'Validation'   },
+  { key: 'FISCAL_YEAR_CHECK',                label: 'Fiscal Year'  },
+  { key: 'INVENTORY_RESERVATION',            label: 'Inventory'    },
+  { key: 'PURCHASE_BOOKING_ACCOUNTING_POST', label: 'PB Ledger'    },
+  { key: 'INVENTORY_ACCOUNTING_POST',        label: 'Inv. Ledger'  },
+  { key: 'COMPLETED',                        label: 'Complete'     },
+]
+
+let parallelN = 3
+let running   = false
+let abortCtrl = null
+
+// ── Token input validation ────────────────────────────────────────────────────
+const tokenInput = document.getElementById('tokenInput')
+tokenInput.addEventListener('input', updateTokenStatus)
+
+function tokenValid(t) {
+  const raw = t.startsWith('Bearer ') ? t.slice(7) : t
+  return raw.startsWith('eyJ') && raw.split('.').length === 3 && raw.length > 100
+}
+
+function updateTokenStatus() {
+  const t = tokenInput.value.trim()
+  const el = document.getElementById('tokenStatus')
+  if (!t) { el.style.display = 'none'; tokenInput.className = 'token-input'; return }
+  el.style.display = 'flex'
+  if (tokenValid(t)) {
+    tokenInput.className = 'token-input valid'
+    el.innerHTML = `<span class="dot green"></span><span style="font-size:10px;color:#4ade80;">Token looks valid</span>`
+  } else {
+    tokenInput.className = 'token-input invalid'
+    el.innerHTML = `<span class="dot red"></span><span style="font-size:10px;color:#f87171;">Must start with eyJ… · 3 parts</span>`
+  }
+}
+
+// ── N stepper ─────────────────────────────────────────────────────────────────
+function changeN(delta) {
+  parallelN = Math.max(2, Math.min(10, parallelN + delta))
+  document.getElementById('nVal').textContent = parallelN
+  document.getElementById('decBtn').disabled = parallelN <= 2
+  document.getElementById('incBtn').disabled = parallelN >= 10
+}
+
+// ── Run ───────────────────────────────────────────────────────────────────────
+async function handleRun() {
+  const token = tokenInput.value.trim()
+  if (!token || !tokenValid(token)) { tokenInput.focus(); return }
+  if (running) return
+
+  running = true
+  setRunning(true)
+  resetUI()
+
+  document.getElementById('chainStrip').classList.remove('hidden')
+  document.getElementById('chainText').textContent = 'Building chain…'
+  document.getElementById('chainDocs').innerHTML = ''
+  document.getElementById('chainSpinner').style.display = 'block'
+
+  buildPanels(parallelN)
+
+  abortCtrl = new AbortController()
+
+  try {
+    const res = await fetch(`${FASTAPI}/pb-concurrency-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ erp_token: token, erp_tenant_id: '666', parallel_count: parallelN }),
+      signal: abortCtrl.signal,
+    })
+
+    if (!res.ok) {
+      showError(`FastAPI returned ${res.status} — is the server running at ${FASTAPI}?`)
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop()
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data:')) continue
+        try {
+          const ev = JSON.parse(line.slice(5).trim())
+          handleEvent(ev)
+        } catch {}
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') showError(`Connection failed: ${e.message}`)
+  } finally {
+    running = false
+    setRunning(false)
+  }
+}
+
+// ── Event handler ─────────────────────────────────────────────────────────────
+function handleEvent(ev) {
+  const text = ev.message || ''
+
+  if (ev.type === 'run_end') {
+    const created = ev.created ?? 0
+    showResult(created)
+    document.getElementById('chainSpinner').style.display = 'none'
+    return
+  }
+
+  // Chain done line
+  if (text.includes('Step 1 done')) {
+    document.getElementById('chainSpinner').style.display = 'none'
+    document.getElementById('chainText').textContent = 'Chain ready'
+    renderChainDocs(text)
+    return
+  }
+
+  // PB-indexed events
+  const pbMatch = text.match(/PB \[(\d+)\]/)
+  if (!pbMatch) return
+  const idx = parseInt(pbMatch[1]) - 1
+
+  if (/PB \[\d+\] CREATED/.test(text)) {
+    const idM  = text.match(/id=(\S+)/)
+    const refM = text.match(/ref=(\S+)/)
+    setPbCreated(idx, idM?.[1], refM?.[1])
+  } else if (/PB \[\d+\] REJECTED/.test(text)) {
+    setPbStatus(idx, 'rejected')
+  } else if (/PB \[\d+\] ERROR/.test(text)) {
+    setPbStatus(idx, 'error')
+  } else {
+    const stepM = text.match(/\[([A-Z_]{4,})\] ([A-Z]+)(?:: (.+))?$/)
+    if (stepM) {
+      const [, step, status, msg] = stepM
+      if (status === 'SUCCESS' || status === 'COMPLETED') markStepDone(idx, step)
+      else if (status === 'FAILED') markStepFailed(idx, step, msg)
+    }
+  }
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function setRunning(on) {
+  const btn = document.getElementById('runBtn')
+  btn.disabled = on
+  btn.classList.toggle('running', on)
+  btn.innerHTML = on
+    ? `<div class="spin" style="border-color:rgba(255,255,255,0.2);border-top-color:#fff"></div> Running…`
+    : `<svg class="icon-sm" viewBox="0 0 16 16" fill="white"><path d="M5 3.5l7 4.5-7 4.5V3.5z"/></svg> Run Test`
+  document.getElementById('decBtn').disabled = on || parallelN <= 2
+  document.getElementById('incBtn').disabled = on || parallelN >= 10
+}
+
+function resetUI() {
+  document.getElementById('resultBanner').className = 'result-banner'
+}
+
+function buildPanels(n) {
+  const grid = document.getElementById('panelsGrid')
+  grid.style.display = 'grid'
+  grid.className = `panels-grid n${n}`
+  grid.innerHTML = ''
+  for (let i = 0; i < n; i++) grid.appendChild(makePbPanel(i))
+}
+
+function makePbPanel(idx) {
+  const panel = document.createElement('div')
+  panel.className = 'pb-panel running'
+  panel.id = `panel-${idx}`
+
+  const stepsHtml = STEPS.map((s, i) => {
+    const isLast = i === STEPS.length - 1
+    return `
+      <div class="step-row">
+        <div class="step-node-col">
+          <div class="step-dot" id="dot-${idx}-${s.key}">
+            <span class="ping-ring" id="ping-${idx}-${s.key}" style="display:none"></span>
+          </div>
+          ${isLast ? '' : `<div class="step-line" id="line-${idx}-${s.key}"></div>`}
+        </div>
+        <span class="step-label" id="lbl-${idx}-${s.key}">${s.label}</span>
+        <span class="step-check" id="chk-${idx}-${s.key}" style="display:none">✓</span>
+      </div>`
+  }).join('')
+
+  panel.innerHTML = `
+    <div class="pb-header">
+      <div class="pb-title">
+        <div class="spin" id="spin-${idx}" style="width:13px;height:13px;border-color:rgba(99,102,241,0.3);border-top-color:#6366f1"></div>
+        PB ${idx + 1}
+      </div>
+      <span class="pb-badge badge-firing" id="badge-${idx}">Firing</span>
+    </div>
+    <div class="pb-id-row" id="idrow-${idx}"></div>
+    <div class="steps">${stepsHtml}</div>`
+
+  // activate first step ping
+  activatePing(idx, 0)
+  return panel
+}
+
+function activatePing(idx, stepIdx) {
+  STEPS.forEach((s, i) => {
+    const ping = document.getElementById(`ping-${idx}-${s.key}`)
+    const dot  = document.getElementById(`dot-${idx}-${s.key}`)
+    const lbl  = document.getElementById(`lbl-${idx}-${s.key}`)
+    if (!ping) return
+    if (i === stepIdx && !dot.classList.contains('done') && !dot.classList.contains('failed')) {
+      ping.style.display = 'block'
+      dot.classList.add('active')
+      lbl.classList.add('active')
+    } else if (!dot.classList.contains('done') && !dot.classList.contains('failed')) {
+      ping.style.display = 'none'
+      dot.classList.remove('active')
+      lbl.classList.remove('active')
+    }
+  })
+}
+
+function markStepDone(idx, stepKey) {
+  const dot  = document.getElementById(`dot-${idx}-${stepKey}`)
+  const line = document.getElementById(`line-${idx}-${stepKey}`)
+  const lbl  = document.getElementById(`lbl-${idx}-${stepKey}`)
+  const chk  = document.getElementById(`chk-${idx}-${stepKey}`)
+  const ping = document.getElementById(`ping-${idx}-${stepKey}`)
+  if (!dot) return
+  ping.style.display = 'none'
+  dot.classList.remove('active')
+  dot.classList.add('done')
+  dot.innerHTML = `<span class="ping-ring" style="display:none"></span><svg viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  if (line) line.classList.add('done')
+  lbl.className = 'step-label done'
+  if (chk) chk.style.display = 'block'
+
+  // activate next step
+  const stepIdx = STEPS.findIndex(s => s.key === stepKey)
+  if (stepIdx >= 0 && stepIdx < STEPS.length - 1) activatePing(idx, stepIdx + 1)
+}
+
+function markStepFailed(idx, stepKey, msg) {
+  const dot  = document.getElementById(`dot-${idx}-${stepKey}`)
+  const lbl  = document.getElementById(`lbl-${idx}-${stepKey}`)
+  const ping = document.getElementById(`ping-${idx}-${stepKey}`)
+  if (!dot) return
+  ping.style.display = 'none'
+  dot.classList.remove('active')
+  dot.classList.add('failed')
+  dot.innerHTML = `<span class="ping-ring" style="display:none"></span><svg viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>`
+  lbl.className = 'step-label failed'
+  if (msg) lbl.textContent = `${lbl.textContent}: ${msg}`
+  setPbStatus(idx, 'error')
+}
+
+function setPbCreated(idx, id, ref) {
+  const panel = document.getElementById(`panel-${idx}`)
+  const badge = document.getElementById(`badge-${idx}`)
+  const spin  = document.getElementById(`spin-${idx}`)
+  const idRow = document.getElementById(`idrow-${idx}`)
+  if (!panel) return
+  panel.className = 'pb-panel created'
+  badge.className = 'pb-badge badge-created'
+  badge.textContent = 'Created'
+  spin.style.display = 'none'
+  if (id) {
+    idRow.className = 'pb-id-row visible'
+    idRow.innerHTML = `<span style="color:#4b5563;font-size:9px;text-transform:uppercase;letter-spacing:.05em">id</span> <span style="color:#d1d5db">${id}</span>`
+    if (ref && ref !== id) idRow.innerHTML += ` <span style="color:#374151">·</span> <span style="color:#4b5563;font-size:9px;text-transform:uppercase;letter-spacing:.05em">ref</span> <span style="color:#d1d5db">${ref}</span>`
+  }
+}
+
+function setPbStatus(idx, status) {
+  const panel = document.getElementById(`panel-${idx}`)
+  const badge = document.getElementById(`badge-${idx}`)
+  const spin  = document.getElementById(`spin-${idx}`)
+  if (!panel) return
+  panel.className = `pb-panel ${status}`
+  badge.className = `pb-badge badge-${status}`
+  badge.textContent = status === 'rejected' ? 'Rejected' : 'Error'
+  spin.style.display = 'none'
+}
+
+function renderChainDocs(text) {
+  const docs = []
+  for (const [lbl, re] of [['PO', /PO=(\S+)/], ['GRN', /GRN=(\S+)/], ['QC', /QC=(\S+)/]]) {
+    const m = text.match(re)
+    if (m) docs.push({ lbl, val: m[1].split('/').pop() })
+  }
+  const el = document.getElementById('chainDocs')
+  el.innerHTML = docs.map((d, i) =>
+    `${i > 0 ? '<span class="arrow">→</span>' : ''}
+     <span class="doc-pill"><span class="doc-label">${d.lbl}</span><span class="doc-val">${d.val}</span></span>`
+  ).join('')
+}
+
+function showResult(created) {
+  const banner = document.getElementById('resultBanner')
+  const title  = document.getElementById('resultTitle')
+  const sub    = document.getElementById('resultSub')
+  banner.classList.add('visible')
+  if (created > 1) {
+    banner.classList.add('warn')
+    title.textContent = `⚠ ${created} duplicate PBs created — ERP has no concurrency guard`
+    sub.textContent   = `All ${created} Purchase Bookings were accepted for the same QC/GRN/PO. Accounting entries posted ${created}×.`
+  } else {
+    banner.classList.add('ok')
+    title.textContent = '✓ ERP rejected duplicate submissions'
+    sub.textContent   = 'Only 1 PB was created and posted.'
+  }
+}
+
+function showError(msg) {
+  const banner = document.getElementById('resultBanner')
+  banner.className = 'result-banner visible warn'
+  document.getElementById('resultTitle').textContent = '✗ ' + msg
+  document.getElementById('resultSub').textContent = ''
+}
+</script>
+</body>
+</html>
