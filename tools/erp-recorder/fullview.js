@@ -13,44 +13,213 @@ const TYPE_META = {
   readonly:      { label: 'READ',     color: '#a5b4fc' },
   start:         { label: 'START',    color: '#56d364' },
   search:        { label: 'SEARCH',   color: '#79c0ff' },
+  error:         { label: 'ERROR',    color: '#f85149' },
+  comment:       { label: 'NOTE',     color: '#6e7681' },
 };
+
+// ── Phase detection ───────────────────────────────────────────────────────
+const PHASE = {
+  start:         'NAVIGATE',
+  navigate:      'NAVIGATE',
+  'dialog-open': 'NAVIGATE',
+  'dialog-close':'NAVIGATE',
+  input:         'FILL FORM',
+  select:        'FILL FORM',
+  button:        'ACTION',
+  swal2:         'ACTION',
+  error:         'VALIDATION',
+  comment:       'VALIDATION',
+  readonly:      'VERIFY',
+  tracking:      'VERIFY',
+  row:           'VERIFY',
+};
+
+function phaseOf(type) { return PHASE[type] || 'ACTION'; }
+
+// ── Summary block ────────────────────────────────────────────────────────
+function buildSummary(steps) {
+  if (!steps.length) return [];
+  const startStep = steps.find(s => s.type === 'start');
+  let module = '';
+  if (startStep) {
+    // Try dynamic-screens/Module/SubModule first, then last 1-2 path segments
+    const url = startStep.label;
+    const mDyn = url.match(/dynamic-screens\/([^/?#]+)/);
+    if (mDyn) {
+      module = decodeURIComponent(mDyn[1]);
+    } else {
+      const segs = url.replace(/[?#].*/, '').split('/').filter(Boolean);
+      module = segs.slice(-2).map(s => s.replace(/-/g, ' ')).join(' / ');
+    }
+  }
+  const counts = {};
+  steps.forEach(s => { const p = phaseOf(s.type); counts[p] = (counts[p] || 0) + 1; });
+  const fills   = (counts['FILL FORM'] || 0);
+  const errs    = steps.filter(s => s.type === 'error').length;
+  const rdonly  = steps.filter(s => s.type === 'readonly').length;
+  const navs    = steps.filter(s => s.type === 'navigate').length;
+  const phases  = [...new Set(steps.map(s => phaseOf(s.type)))].join(' → ');
+  const w = 46;
+  const pad = (str, len) => str + ' '.repeat(Math.max(0, len - str.length));
+  const row = (label, val) => `# │ ${pad(label + ': ' + val, w)} │`;
+  return [
+    `# ┌${'─'.repeat(w + 2)}┐`,
+    row('Module',  module || '(unknown)'),
+    row('Steps',   `${steps.length}  │  Fill: ${fills}  │  Errors: ${errs}  │  Readonly: ${rdonly}  │  Navs: ${navs}`),
+    row('Flow',    phases),
+    `# └${'─'.repeat(w + 2)}┘`,
+    '',
+  ];
+}
+
+// ── Stepper breadcrumb tracker ────────────────────────────────────────────
+// Extracts [StepLabel] prefix from error/comment step labels.
+function extractStepperLabel(s) {
+  // error label: [StepLabel] "Field": "msg"
+  if (s.type === 'error') {
+    const m = (s.label || '').match(/^\[([^\]]+)\]/);
+    return m ? m[1] : null;
+  }
+  // comment label: "No validation errors on [StepLabel]"
+  if (s.type === 'comment') {
+    const m = (s.label || '').match(/\[([^\]]+)\]/);
+    if (m) return m[1];
+    const mc = (s.code || '').match(/\[([^\]]+)\]/);
+    return mc ? mc[1] : null;
+  }
+  // matsteppernext value: "Next:StepLabel"
+  if (s.type === 'button' && (s.code || '').includes('matsteppernext')) {
+    const m = (s.value || '').match(/^[^:]+:(.+)$/);
+    return m ? m[1] : null;
+  }
+  return null;
+}
+
+// ── Field-type hint ───────────────────────────────────────────────────────
+function fieldTypeHint(s) {
+  if (s.type === 'select') return '  # [dropdown]';
+  if (s.type === 'input') {
+    const code = s.code || '';
+    if (code.includes('@matinput') && code.includes('fill(')) return '  # [date DD/MM/YYYY]';
+    if (code.includes('type="number"') || /\d{4,}/.test(s.value || '')) return '  # [number]';
+    return '  # [text]';
+  }
+  return '';
+}
+
+// ── Auto-patch inline block ───────────────────────────────────────────────
+function patchedBlock(s) {
+  if (!s.patched || !s.patched.length) return [];
+  // Dedup by label+rowIndex (same field can appear twice if both nth variants match)
+  const seen = new Set();
+  s.patched = s.patched.filter(p => {
+    const k = `${p.label}:${p.rowIndex ?? ''}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const out = [];
+
+  // Header — what triggered these auto-fills
+  const trigger = s.type === 'start'    ? 'page load'
+                : s.type === 'navigate' ? 'navigation'
+                : s.type === 'select'   ? `selecting "${s.label}" = "${s.value}"`
+                : s.type === 'input'    ? `filling "${s.label}" = "${s.value}"`
+                : `"${s.label}"`;
+
+  // Align field names for readability
+  const maxLen = Math.max(...s.patched.map(p => p.label.length));
+  const pad = (str, len) => str + ' '.repeat(Math.max(0, len - str.length));
+
+  out.push(`# ╔═ Auto-filled by ${trigger}:`);
+  for (const p of s.patched) {
+    const rowTag = p.rowIndex != null ? ` [row ${p.rowIndex + 1}]` : '';
+    const displayLabel = p.label + rowTag;
+    out.push(`# ║  ${pad(displayLabel, maxLen + 8)} = "${p.value}"`);
+  }
+  out.push(`# ╚═ [AI: read with ${s.patched[0].isSelect ? '.text_content().strip()' : '.input_value()'}; store in variables if used downstream]`);
+
+  // Wait guard for async select autofill
+  if (s.type === 'select') {
+    const p0 = s.patched[0];
+    const nth = p0.rowIndex != null ? `.nth(${p0.rowIndex})` : '';
+    const tgt = p0.isSelect ? 'mat-select' : 'input';
+    const lp0 = p0.label.replace(/'/g, "\\'");
+    out.push(`page.locator("xpath=//mat-label[contains(.,'${lp0}')]/ancestor::mat-form-field//${tgt}")${nth}.wait_for(state="visible", timeout=10000)`);
+  }
+
+  // Asserts
+  for (const p of s.patched) {
+    const lp = p.label.replace(/'/g, "\\'");
+    const vq = p.value.replace(/"/g, '\\"');
+    const nth = p.rowIndex != null ? `.nth(${p.rowIndex})` : '';
+    out.push(p.isSelect
+      ? `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
+      : `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`);
+  }
+  return out;
+}
 
 function generateCode(steps) {
   if (!steps.length) return '# No steps recorded yet.';
-  const lines = ['# Generated by ERP Playwright Recorder', ''];
+
+  // Count stepper steps for breadcrumb N/M
+  const allStepperLabels = [];
+  steps.forEach(s => {
+    const lbl = extractStepperLabel(s);
+    if (lbl && !allStepperLabels.includes(lbl)) allStepperLabels.push(lbl);
+  });
+
+  const lines = [
+    '# Generated by ERP Playwright Recorder',
+    '',
+    ...buildSummary(steps),
+  ];
+
+  let lastPhase = null;
+  let lastStepperLabel = null;
+
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const prev = steps[i - 1];
-    if (prev && needsBlankLine(prev.type, s.type)) lines.push('');
-    if (s.type === 'navigate')       lines.push(`# ── Navigate: ${s.label} ──`);
-    else if (s.type === 'dialog-open')   lines.push(`# ── Dialog opened: "${s.label}" ──`);
-    else if (s.type === 'dialog-close')  lines.push(`# ── Dialog closed ──`);
-    else if (s.type === 'tracking')  lines.push(`# ── PB tracking card ──`);
-    lines.push(s.code);
-    if (s.patched && s.patched.length) {
-      const ctx = s.type === 'start'    ? 'page loaded, fields matching initial state'
-                : s.type === 'navigate' ? 'auto-patched after navigation'
-                : `auto-patched after "${s.label}"`;
-      lines.push(`#  ${ctx}:`);
-      if (s.type === 'select') {
-        // selection fired an async autofill — wait on the first patched field
-        const p0 = s.patched[0];
-        const nth = p0.rowIndex != null ? `.nth(${p0.rowIndex})` : '';
-        const tgt = p0.isSelect ? 'mat-select' : 'input';
-        const lp0 = p0.label.replace(/'/g, "\\'");
-        lines.push(`page.locator("xpath=//mat-label[contains(.,'${lp0}')]/ancestor::mat-form-field//${tgt}")${nth}.wait_for(state="visible", timeout=10000)`);
-      }
-      for (const p of s.patched) {
-        const lp = p.label.replace(/'/g, "\\'");
-        const vq = p.value.replace(/"/g, '\\"');
-        const nth = p.rowIndex != null ? `.nth(${p.rowIndex})` : '';
-        lines.push(`#    ${p.label} = "${p.value}"`);
-        lines.push(p.isSelect
-          ? `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
-          : `assert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`);
-      }
+    const phase = phaseOf(s.type);
+
+    // ── Phase section header ──────────────────────────────────────────
+    if (phase !== lastPhase) {
+      if (lastPhase !== null) lines.push('');
+      lines.push(`# ${'═'.repeat(3)} ${phase} ${'═'.repeat(Math.max(0, 44 - phase.length))}`);
+      lastPhase = phase;
+    } else if (prev && needsBlankLine(prev.type, s.type)) {
+      lines.push('');
     }
+
+    // ── Stepper breadcrumb (only when there are multiple steps) ──────
+    const stepperLbl = extractStepperLabel(s);
+    if (stepperLbl && stepperLbl !== lastStepperLabel && allStepperLabels.length > 1) {
+      const idx = allStepperLabels.indexOf(stepperLbl) + 1;
+      const total = allStepperLabels.length;
+      lines.push(`# ── Stepper: ${stepperLbl} (${idx}/${total}) ──`);
+      lastStepperLabel = stepperLbl;
+    }
+
+    // ── Navigate / dialog annotations ────────────────────────────────
+    if (s.type === 'navigate')          lines.push(`# ── Navigate: ${s.label} ──`);
+    else if (s.type === 'dialog-open')  lines.push(`# ── Dialog opened: "${s.label}" ──`);
+    else if (s.type === 'dialog-close') lines.push(`# ── Dialog closed ──`);
+    else if (s.type === 'tracking')     lines.push(`# ── PB tracking card ──`);
+
+    // ── Main code line + field-type hint ─────────────────────────────
+    const hint = fieldTypeHint(s);
+    if (hint && !s.code.includes('\n')) {
+      lines.push(s.code + hint);
+    } else {
+      lines.push(s.code);
+    }
+
+    // ── Auto-patch inline block ───────────────────────────────────────
+    patchedBlock(s).forEach(l => lines.push(l));
   }
+
   return lines.join('\n');
 }
 
