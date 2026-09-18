@@ -58,10 +58,9 @@ interface Preset {
 
 const TAB_CONFIG: { key: 'ui' | 'api' | 'batch'; label: string; icon: React.ReactNode; color: string }[] = [
   { key: 'ui',    label: 'UI Tests',     icon: <Monitor className="size-2.5" />,  color: '#1565C0' },
-  { key: 'api',   label: 'API Tests',    icon: <Code2 className="size-2.5" />,    color: '#6A1B9A' },
   { key: 'batch', label: 'Batch Create', icon: <Package className="size-2.5" />,  color: '#E65100' },
 ]
-const ALL_TABS: ('ui' | 'api' | 'batch')[] = ['ui', 'api', 'batch']
+const ALL_TABS: ('ui' | 'api' | 'batch')[] = ['ui', 'batch']
 
 function parseEntry(entry: string): { id: string; tabs: ('ui' | 'api' | 'batch')[] | null } {
   const [id, suffix] = entry.split('|')

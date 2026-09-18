@@ -375,37 +375,31 @@ export function TestRunnerTab({
   onSubTabChange?: (tab: 'ui' | 'api' | 'batch') => void
   initialSubTab?: 'ui' | 'api' | 'batch'
 }) {
-  const uiTests = tests.filter((t) => !t.testType || t.testType === 'ui')
-  const apiTests = tests.filter((t) => t.testType === 'api')
-  const hasApi = apiTests.length > 0
+  const uiOnlyTests = tests.filter(t => t.testType !== 'api')
+  const uiTests = uiOnlyTests.length > 0 ? uiOnlyTests : tests
 
-  // Tabs restricted by admin; null = no restriction
-  const tabAllowed = (t: 'ui' | 'api' | 'batch') =>
-    !allowedTabs || allowedTabs.includes(t)
+  // Tabs restricted by admin; null = no restriction ('api' removed — no longer used)
+  const tabAllowed = (t: 'ui' | 'batch') =>
+    !allowedTabs || (allowedTabs as string[]).includes(t)
 
-  const defaultTab: 'ui' | 'api' | 'batch' =
-    initialSubTab && tabAllowed(initialSubTab) ? initialSubTab :
-    tabAllowed('ui') ? 'ui' : tabAllowed('batch') ? 'batch' : 'api'
+  const defaultTab: 'ui' | 'batch' =
+    initialSubTab === 'batch' && tabAllowed('batch') ? 'batch' : 'ui'
 
-  const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>(defaultTab)
+  const [activeTab, setActiveTab] = useState<'ui' | 'batch'>(defaultTab)
 
   const isBatch = activeTab === 'batch'
-  const effectiveTab = isBatch ? 'batch' : (hasApi ? activeTab : 'ui')
-  const visibleTests = !isBatch ? (effectiveTab === 'ui' ? uiTests : apiTests) : []
+  const effectiveTab = isBatch ? 'batch' : 'ui'
+  const visibleTests = !isBatch ? uiTests : []
 
   const handleRun = (selectedOnly: boolean) => {
-    if (effectiveTab === 'api' && !erpToken && onOpenCredentials) {
-      onOpenCredentials()
-      return
-    }
-    onRun(selectedOnly, effectiveTab === 'batch' ? undefined : effectiveTab as 'ui' | 'api')
+    onRun(selectedOnly, isBatch ? undefined : 'ui')
   }
 
   const visibleTotalFailed = visibleTests.filter((t) => t.status === 'failed').length
 
   const tabSwitcher = (
     <div className="flex items-center gap-0 px-4 py-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
-      {(['ui', ...(hasApi ? (['api'] as const) : []), 'batch'] as const).filter(tabAllowed).map((t) => (
+      {(['ui', 'batch'] as const).filter(tabAllowed).map((t) => (
         <button
           key={t}
           type="button"
@@ -417,12 +411,11 @@ export function TestRunnerTab({
           }`}
         >
           {t === 'ui'    && <Monitor className="size-3.5" />}
-          {t === 'api'   && <Terminal className="size-3.5" />}
           {t === 'batch' && <Database className="size-3.5" />}
-          {t === 'ui'    ? 'UI Tests' : t === 'api' ? 'API Tests' : 'Batch Create'}
-          {t !== 'batch' && (
+          {t === 'ui' ? 'UI Tests' : 'Batch Create'}
+          {t === 'ui' && (
             <span className="text-[10px] opacity-60">
-              ({t === 'ui' ? uiTests.length : apiTests.length})
+              ({uiTests.length})
             </span>
           )}
         </button>
@@ -459,7 +452,7 @@ export function TestRunnerTab({
         totalFailed={visibleTotalFailed}
         onRerunFailed={onRerunFailed}
         showRawNames={showRawNames}
-        sectionLabel={effectiveTab === 'api' ? 'API Tests' : 'UI Tests'}
+        sectionLabel="UI Tests"
         tokenBadge={effectiveTab === 'api' ? (
           <div className="flex items-center gap-1">
             <button

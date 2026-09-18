@@ -350,9 +350,10 @@ window.__erpRecorderInjected = true;
     const lp = ro.label.replace(/'/g, "\\'");
     const vq = ro.value.replace(/"/g, '\\"');
     const nth = ro.rowIndex != null ? `.nth(${ro.rowIndex})` : '';
+    const note = `# [AI NOTE] Read-only/computed field — in the page object add a getter: use .input_value() for text inputs, .text_content().strip() for mat-select/display fields; store the result in a variable and pass it to any downstream steps that depend on this value\n`;
     return ro.isSelect
-      ? `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
-      : `# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`;
+      ? `${note}# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//mat-select")${nth}.text_content().strip() == "${vq}"`
+      : `${note}# Assert field: ${ro.label} = "${vq}"\nassert page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input")${nth}.input_value() == "${vq}"`;
   }
 
   let _toastTimer = null;
@@ -1083,6 +1084,28 @@ window.__erpRecorderInjected = true;
       return;
     }
 
+    // mat-datepicker calendar day click → record as fill on the visible input
+    const calCell = e.target.closest('.mat-calendar-body-cell');
+    if (calCell) {
+      const dateVal = calCell.getAttribute('aria-label'); // "DD/MM/YYYY"
+      if (dateVal) {
+        // The open calendar has an id; the hidden sibling input carries data-mat-calendar
+        const cal = e.target.closest('mat-calendar') || document.querySelector('mat-calendar');
+        const calId = cal ? cal.id : null;
+        const hiddenInp = calId
+          ? document.querySelector(`input[data-mat-calendar="${calId}"]`)
+          : null;
+        const ff = hiddenInp ? hiddenInp.closest('mat-form-field, .mat-mdc-form-field') : null;
+        const lbl = ff ? (ff.querySelector('mat-label')?.textContent?.trim() || '') : '';
+        const safeLbl = lbl.replace(/'/g, "\\'");
+        const code = lbl
+          ? `page.locator("xpath=//mat-label[contains(.,'${safeLbl}')]/ancestor::mat-form-field//input[@matinput]").fill("${dateVal}")`
+          : `page.locator("mat-form-field input[matinput]").fill("${dateVal}")`;
+        addStep({ type: 'input', label: lbl || 'date', value: dateVal, code });
+        return;
+      }
+    }
+
     // Button clicks that drive the flow (Add / Submit / Update / Close …)
     recordButtonClick(e);
   }, true);
@@ -1097,6 +1120,7 @@ window.__erpRecorderInjected = true;
     const cls = btn.className || '';
     if (cls.includes('erp-add-btn') || cls.includes('add-row-btn')) return true;
     if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) return true;
+    if (btn.hasAttribute('data-sd-details-opener')) return true;
     if (cls.includes('erp-row-trigger')) return true;
     if (cls.includes('erp-outline-btn')) return true; // row action OR header toolbar btn
     if (cls.includes('page-nav-btn') || cls.includes('page-num-btn')) return true;
@@ -1145,6 +1169,15 @@ window.__erpRecorderInjected = true;
       return {
         label: `${icon} (row ${idx})`,
         code: `page.locator("td.action-container button").nth(${idx}).click()`
+      };
+    }
+    if (btn.hasAttribute('data-sd-details-opener')) {
+      const opener = btn.getAttribute('data-sd-details-opener');
+      const safeOpener = opener.replace(/"/g, '\\"');
+      const lbl = text || opener;
+      return {
+        label: lbl,
+        code: `page.locator("button[data-sd-details-opener=\\"${safeOpener}\\"]").click()`
       };
     }
     if (cls.includes('apply-button') && btn.querySelector('.fa-minus, i.fa-minus')) {

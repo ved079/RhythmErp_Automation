@@ -162,6 +162,15 @@ FUNCTION_DISPLAY_NAMES: dict[str, str] = {
     "test_supplier_has_3_steppers": "Supplier Has 3 Steppers",
     "test_missing_billing_address_rejected": "Missing Billing Address Rejected",
     "test_missing_shipping_address_rejected": "Missing Shipping Address Rejected",
+    # ── Farmer — Playwright UI ──
+    "test_create_search_view":             "Create, Search & View",
+    "test_view_first_farmer":              "View Existing Farmer",
+    "test_export_matches_table":           "Export Master Matches Table",
+    "test_create_edit_view_history":       "Create, Edit & History",
+    "test_walkin_required_fields":         "Walk-in Required Field Validation",
+    "test_fpc_required_fields":            "FPC Member Required Field Validation",
+    "test_borrower_required_fields":       "Borrower Required Field Validation",
+
     # ── Supplier — API Perf ──
     "test_batch_create_5_suppliers": "Batch Create 5 Suppliers",
     "test_payload_generation_speed": "Payload Generation Speed",
@@ -234,11 +243,20 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
             # Look for test/ folder or test_*.py files directly
             test_dir = os.path.join(sub_path, "test")
             if os.path.isdir(test_dir):
-                # Scan top-level test files (UI tests)
-                for tf in sorted(os.listdir(test_dir)):
-                    if tf.startswith("test_") and tf.endswith(".py"):
-                        test_files.append(tf)
-                        all_tests.extend(parse_test_functions(os.path.join(test_dir, tf), test_type="ui"))
+                # Check whether a playwright/ subfolder with test files exists —
+                # if so, skip the top-level selenium files for this sub-module.
+                playwright_dir = os.path.join(test_dir, "playwright")
+                has_playwright = os.path.isdir(playwright_dir) and any(
+                    f.startswith("test_") and f.endswith(".py")
+                    for f in os.listdir(playwright_dir)
+                )
+
+                # Scan top-level test files (UI tests) — skip when playwright tests exist
+                if not has_playwright:
+                    for tf in sorted(os.listdir(test_dir)):
+                        if tf.startswith("test_") and tf.endswith(".py"):
+                            test_files.append(tf)
+                            all_tests.extend(parse_test_functions(os.path.join(test_dir, tf), test_type="ui"))
                 # Scan test/api/ subdirectory (API tests)
                 api_dir = os.path.join(test_dir, "api")
                 if os.path.isdir(api_dir):
@@ -247,7 +265,6 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
                             test_files.append(f"api/{tf}")
                             all_tests.extend(parse_test_functions(os.path.join(api_dir, tf), test_type="api"))
                 # Scan test/playwright/ subdirectory (Playwright UI tests)
-                playwright_dir = os.path.join(test_dir, "playwright")
                 if os.path.isdir(playwright_dir):
                     for tf in sorted(os.listdir(playwright_dir)):
                         tf_path = os.path.join(playwright_dir, tf)

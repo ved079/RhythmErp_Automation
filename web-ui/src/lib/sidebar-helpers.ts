@@ -1,7 +1,7 @@
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import type { AuthUser } from '@/components/auth/LoginPage'
 import { type ApiModule } from '@/lib/api'
-import { getCachedFolderToSidebarId } from '@/lib/module-data'
+import { getCachedFolderToSidebarId, hasExplicitFolderMapping } from '@/lib/module-data'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 
 /**
@@ -13,11 +13,17 @@ export function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
   const sidebar: SidebarModule[] = JSON.parse(JSON.stringify(ALL_SIDEBAR_MODULES))
 
   // Build a lookup: sidebarId → test count from API
+  // Try compound key "{module}_{sub}" first so documents/member → doc-member
+  // doesn't collide with registration/member → member
   const testCounts: Record<string, number> = {}
   for (const apiMod of apiModules) {
     for (const sub of apiMod.sub_modules) {
-      const sid = getCachedFolderToSidebarId(sub.name)
-      testCounts[sid] = sub.tests.length
+      const compoundKey = `${apiMod.name}_${sub.name}`
+      const sid = hasExplicitFolderMapping(compoundKey)
+        ? getCachedFolderToSidebarId(compoundKey)
+        : getCachedFolderToSidebarId(sub.name)
+      const uiOnly = sub.tests.filter((t: { type: string }) => t.type !== 'api')
+      testCounts[sid] = uiOnly.length > 0 ? uiOnly.length : sub.tests.length
     }
     // Standalone modules
     if (apiMod.sub_modules.length === 0) {

@@ -32,6 +32,12 @@ const FOLDER_TO_SIDEBAR_FALLBACK: Record<string, string> = {
   entity_group_definition: 'entity-group',
   role_creation_screen: 'role-creation',
   user_creation: 'user-creation',
+  // Document sub-modules — folder names under pages/documents/modules/
+  // These use doc- prefix to avoid clash with registration/member
+  documents_member:         'doc-member',
+  documents_directors:      'doc-directors',
+  documents_register_charges: 'doc-register-charges',
+  documents_register_of_loan: 'doc-register-of-loan',
   farmer: 'farmer',
   customer: 'customer',
   supplier: 'supplier',
@@ -89,6 +95,17 @@ const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: st
   'quality-check': { module: 'private_b2b', subModule: 'quality_check' },
   'direct-pb-flow':  { module: 'private_b2b', subModule: 'direct_pb_flow' },
   'po-qc-pb-flow':   { module: 'private_b2b', subModule: 'po_qc_pb_flow' },
+  // Document sub-modules
+  'doc-member':           { module: 'documents', subModule: 'member' },
+  'doc-directors':        { module: 'documents', subModule: 'directors' },
+  'doc-register-charges': { module: 'documents', subModule: 'register_charges' },
+  'doc-register-of-loan': { module: 'documents', subModule: 'register_of_loan' },
+  'constituent-documents':    { module: 'documents', subModule: 'constituent_documents' },
+  'miscellaneous-documents':  { module: 'documents', subModule: 'miscellaneous_documents' },
+}
+
+export function hasExplicitFolderMapping(folderName: string): boolean {
+  return folderName in FOLDER_TO_SIDEBAR_FALLBACK
 }
 
 export function getCachedFolderToSidebarId(folderName: string): string {

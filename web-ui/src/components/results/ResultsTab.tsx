@@ -115,13 +115,8 @@ export function ResultsTab({
     [moduleHealth, currentModuleId]
   )
 
-  /* ── UI / API filter ── */
-  const [testTypeFilter, setTestTypeFilter] = useState<'all' | 'ui' | 'api'>('all')
-
-  const visibleTests = useMemo(
-    () => testTypeFilter === 'all' ? tests : tests.filter(t => (t.testType ?? 'ui') === testTypeFilter),
-    [tests, testTypeFilter]
-  )
+  const uiOnlyTests = tests.filter(t => t.testType !== 'api')
+  const visibleTests = uiOnlyTests.length > 0 ? uiOnlyTests : tests
 
   const filteredPassedCount = visibleTests.filter(t => t.status === 'passed').length
   const filteredFailedCount = visibleTests.filter(t => t.status === 'failed').length
@@ -129,8 +124,7 @@ export function ResultsTab({
   const passRate = filteredTotalCount > 0 ? Math.round((filteredPassedCount / filteredTotalCount) * 100) : 0
   const pendingCount = visibleTests.filter(t => t.status === 'pending').length
 
-  const uiCount = tests.filter(t => (t.testType ?? 'ui') === 'ui').length
-  const apiCount = tests.filter(t => t.testType === 'api').length
+  const uiCount = tests.length
 
   /* ── Error history ── */
   const [errorOpen, setErrorOpen] = useState(true)
@@ -166,12 +160,7 @@ export function ResultsTab({
     return null
   }, [moduleRuns])
 
-  const typeMatchesFilter = useCallback((testId: string) => {
-    if (testTypeFilter === 'all') return true
-    const test = tests.find(t => t.id === testId)
-    const inferredType = test?.testType ?? (testId.includes('test_api') ? 'api' : 'ui')
-    return inferredType === testTypeFilter
-  }, [testTypeFilter, tests])
+  const typeMatchesFilter = useCallback((_testId: string) => true, [])
 
   const activeErrors = useMemo(
     () => errorHistory.filter(e => getLatestStatusForTest(e.testId) !== 'passed' && typeMatchesFilter(e.testId)),
@@ -258,20 +247,6 @@ export function ResultsTab({
             <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-[#3F51B5]/[0.07] to-[#3F51B5]/[0.03] dark:from-[#3F51B5]/20 dark:to-[#3F51B5]/10 border-b border-gray-300 dark:border-gray-500/70 shrink-0">
               <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Test Results</span>
 
-              {/* UI / API toggle */}
-              <div className="flex items-center gap-0.5 bg-white/60 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-600/60 rounded-md p-0.5 ml-1">
-                {(['all', 'ui', 'api'] as const).map(f => (
-                  <button key={f} onClick={() => setTestTypeFilter(f)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                      testTypeFilter === f
-                        ? 'bg-[#3F51B5] text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    {f === 'all' ? `All (${totalCount})` : f === 'ui' ? `UI (${uiCount})` : `API (${apiCount})`}
-                  </button>
-                ))}
-              </div>
 
               <div className="flex-1" />
               <div className="flex items-center gap-3">
