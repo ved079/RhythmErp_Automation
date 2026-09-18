@@ -7,134 +7,124 @@ import { Label } from '@/components/ui/label'
 import { Play, Loader2, CheckCircle2, XCircle, RotateCcw } from 'lucide-react'
 import { startConnectorWagoChain, type SSEEvent } from '@/lib/api'
 
-const CLASS_NAME = 'TestConnectorWagoFlow'
-
 const DOCS = [
-  { label: 'PO',  step: 'test_create_po',  colors: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-800' },
-  { label: 'GP',  step: 'test_create_gp',  colors: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
-  { label: 'GRN', step: 'test_create_grn', colors: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
-  { label: 'QC',  step: 'test_create_qc',  colors: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
-  { label: 'PB',  step: 'test_create_pb',  colors: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
+  { label: 'PO',  step: 'test_create_po',  batchStep: 'test_batch_po',  colors: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-800' },
+  { label: 'GP',  step: 'test_create_gp',  batchStep: 'test_batch_gp',  colors: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
+  { label: 'GRN', step: 'test_create_grn', batchStep: 'test_batch_grn', colors: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
+  { label: 'QC',  step: 'test_create_qc',  batchStep: 'test_batch_qc',  colors: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+  { label: 'PB',  step: 'test_create_pb',  batchStep: 'test_batch_pb',  colors: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
 ]
 
-type StepStatus = 'idle' | 'working' | 'done' | 'error'
+type DocStatus = 'idle' | 'working' | 'done' | 'error' | 'skipped'
 
-interface FlowStep {
+interface DocState {
   label: string
-  step: string
-  status: StepStatus
-  docId?: string
-}
-
-interface FlowRun {
-  flowIdx: number
-  steps: FlowStep[]
+  status: DocStatus
+  docIds: string[]   // created ref_nos (length grows as chains complete)
+  retries: number
+  total: number      // how many chains expected for this doc
 }
 
 export function ConnectorWagoFlowSection() {
   const [count, setCount] = useState(1)
   const [stopAt, setStopAt] = useState(DOCS.length - 1)
   const [running, setRunning] = useState(false)
-  const [flows, setFlows] = useState<FlowRun[]>([])
-  const currentFlowRef = useRef(1)
-  const activeStepsRef = useRef(DOCS.map(d => d.step))
+  const [docs, setDocs] = useState<DocState[]>([])
+  const activeDocsRef = useRef<string[]>([])
 
   const selectedDocs = DOCS.slice(0, stopAt + 1)
 
-  const setStepField = useCallback((flowIdx: number, stepLabel: string, patch: Partial<FlowStep>) => {
-    setFlows(prev => prev.map(f =>
-      f.flowIdx !== flowIdx ? f : {
-        ...f,
-        steps: f.steps.map(s => s.label === stepLabel ? { ...s, ...patch } : s),
-      }
-    ))
+  const patchDoc = useCallback((label: string, patch: Partial<DocState>) => {
+    setDocs(prev => prev.map(d => d.label === label ? { ...d, ...patch } : d))
   }, [])
 
   const handleRun = useCallback(async () => {
-    const selectedSteps = DOCS.slice(0, stopAt + 1).map(d => d.step)
-    activeStepsRef.current = selectedSteps
-    currentFlowRef.current = 1
+    const activeDocs = DOCS.slice(0, stopAt + 1)
+    activeDocsRef.current = activeDocs.map(d => d.label)
+    const n = Math.max(1, count)
 
-    const initFlows: FlowRun[] = Array.from({ length: count }, (_, i) => ({
-      flowIdx: i + 1,
-      steps: DOCS.slice(0, stopAt + 1).map(d => ({ label: d.label, step: d.step, status: 'idle' as StepStatus })),
+    const initDocs: DocState[] = activeDocs.map((d, i) => ({
+      label: d.label,
+      status: i === 0 ? 'working' : 'idle',
+      docIds: [],
+      retries: 0,
+      total: n,
     }))
-    // mark first step of first flow as working
-    if (initFlows[0]) initFlows[0].steps[0] = { ...initFlows[0].steps[0], status: 'working' }
-
-    setFlows(initFlows)
+    setDocs(initDocs)
     setRunning(true)
 
+    const batchSteps = activeDocs.map(d => d.batchStep)
+
     await startConnectorWagoChain(
-      count,
+      n,
       (ev: SSEEvent) => {
         const msg = ev.message ?? ''
         if (!msg) return
 
-        // new chain starting
-        const chainHdr = msg.match(/^Chain \[(\d+)\/\d+\]/)
-        if (chainHdr) {
-          const idx = parseInt(chainHdr[1])
-          currentFlowRef.current = idx
-          setFlows(prev => prev.map(f =>
-            f.flowIdx !== idx ? f : {
-              ...f,
-              steps: f.steps.map((s, si) => ({ ...s, status: si === 0 ? 'working' : 'idle' })),
-            }
-          ))
-          return
-        }
-
-        const flow = currentFlowRef.current
-
-        // DOC_CREATED:PO:PO/2026-2027/000839
-        const docCreated = msg.match(/^DOC_CREATED:(\w+):(.+)$/)
+        // DOC_CREATED:PO:PO/2026-2027/000839 — may fire N times per doc type
+        const docCreated = msg.match(/DOC_CREATED:(\w+):([^\s]+)/)
         if (docCreated) {
           const [, label, docId] = docCreated
-          setStepField(flow, label, { status: 'done', docId: docId.trim() })
-          // mark next step working
-          const steps = activeStepsRef.current
-          const doc = DOCS.find(d => d.label === label)
-          if (doc) {
-            const idx = steps.indexOf(doc.step)
-            if (idx >= 0 && idx < steps.length - 1) {
-              const nextDoc = DOCS[idx + 1]
-              if (nextDoc) setStepField(flow, nextDoc.label, { status: 'working' })
+          setDocs(prev => prev.map(d => {
+            if (d.label !== label) return d
+            const newIds = [...d.docIds, docId.trim()]
+            // Mark done when all N for this doc are created; else keep working
+            const isDone = newIds.length >= d.total
+            if (isDone) {
+              // Advance next doc to working
+              const idx = activeDocsRef.current.indexOf(label)
+              if (idx >= 0 && idx < activeDocsRef.current.length - 1) {
+                const nextLabel = activeDocsRef.current[idx + 1]
+                setTimeout(() => patchDoc(nextLabel, { status: 'working' }), 0)
+              }
             }
-          }
+            return { ...d, docIds: newIds, status: isDone ? 'done' : 'working' }
+          }))
           return
         }
 
-        // FAILED line — mark current working step as error
-        const failedM = msg.match(/::TestConnectorWagoFlow::(test_create_\w+)\s+FAILED/)
+        // RETRY:PO:1
+        const retryM = msg.match(/RETRY:(\w+):(\d+)/)
+        if (retryM) {
+          patchDoc(retryM[1], { retries: parseInt(retryM[2]) })
+          return
+        }
+
+        // FAILED line
+        const failedM = msg.match(/::TestConnectorWagoBatchFlow::(test_batch_\w+)\s+FAILED/)
         if (failedM) {
-          const step = failedM[1]
-          const doc = DOCS.find(d => d.step === step)
-          if (doc) setStepField(flow, doc.label, { status: 'error' })
+          const failedBatchStep = failedM[1]
+          const doc = DOCS.find(d => d.batchStep === failedBatchStep)
+          if (doc) {
+            patchDoc(doc.label, { status: 'error' })
+            const idx = activeDocsRef.current.indexOf(doc.label)
+            for (let j = idx + 1; j < activeDocsRef.current.length; j++) {
+              patchDoc(activeDocsRef.current[j], { status: 'skipped' })
+            }
+          }
         }
       },
       () => {
         setRunning(false)
-        // any still-working steps → error
-        setFlows(prev => prev.map(f => ({
-          ...f,
-          steps: f.steps.map(s => s.status === 'working' ? { ...s, status: 'error' } : s),
-        })))
+        setDocs(prev => prev.map(d =>
+          d.status === 'working' ? { ...d, status: 'error' } :
+          d.status === 'idle'    ? { ...d, status: 'skipped' } : d
+        ))
       },
       (err: Error) => {
         setRunning(false)
-        setFlows(prev => prev.map(f => ({
-          ...f,
-          steps: f.steps.map(s => s.status === 'working' ? { ...s, status: 'error' } : s),
-        })))
+        setDocs(prev => prev.map(d =>
+          d.status === 'working' ? { ...d, status: 'error' } :
+          d.status === 'idle'    ? { ...d, status: 'skipped' } : d
+        ))
       },
-      selectedSteps,
+      batchSteps,
     )
-  }, [count, stopAt, setStepField])
+  }, [count, stopAt, patchDoc])
 
-  const isDone = !running && flows.length > 0
-  const allPassed = isDone && flows.every(f => f.steps.every(s => s.status === 'done'))
-  const anyFailed = isDone && flows.some(f => f.steps.some(s => s.status === 'error'))
+  const isDone = !running && docs.length > 0
+  const allPassed = isDone && docs.every(d => d.status === 'done' || d.status === 'skipped')
+  const anyFailed = isDone && docs.some(d => d.status === 'error')
 
   return (
     <div className="flex flex-col gap-5 h-full min-h-0">
@@ -186,23 +176,23 @@ export function ConnectorWagoFlowSection() {
             className="h-8 px-4 gap-1.5 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] text-white"
           >
             {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-            {running ? 'Running…' : flows.length > 0 ? 'Run again' : 'Run'}
+            {running ? 'Running…' : docs.length > 0 ? 'Run again' : 'Run'}
           </Button>
         </div>
       </div>
 
       {/* ── Activity feed ─────────────────────────────────────── */}
-      {flows.length > 0 && (
+      {docs.length > 0 && (
         <div className="flex-1 min-h-0 overflow-auto flex flex-col gap-4">
 
           {/* Done banner */}
           {isDone && (
             <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium ${
-              allPassed
+              !anyFailed
                 ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                 : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
             }`}>
-              {allPassed
+              {!anyFailed
                 ? <><CheckCircle2 className="size-4" /> All flows completed</>
                 : <><XCircle className="size-4" /> Some steps failed</>
               }
@@ -215,83 +205,94 @@ export function ConnectorWagoFlowSection() {
             </div>
           )}
 
-          {/* Flow cards */}
-          {flows.map(flow => (
-            <div key={flow.flowIdx} className="flex flex-col gap-0">
-              {/* Flow label (only when multiple flows) */}
-              {count > 1 && (
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mb-2 uppercase tracking-wider">
-                  Flow {flow.flowIdx}
-                </div>
-              )}
+          {/* Doc-type rows */}
+          <div className="flex flex-col">
+            {docs.map((doc, si) => {
+              const docDef = DOCS.find(d => d.label === doc.label)!
+              const isLast = si === docs.length - 1
 
-              {/* Steps */}
-              <div className="flex flex-col">
-                {flow.steps.map((step, si) => {
-                  const doc = DOCS.find(d => d.label === step.label)!
-                  const isLast = si === flow.steps.length - 1
-
-                  return (
-                    <div key={step.label} className="flex gap-3">
-                      {/* Timeline spine */}
-                      <div className="flex flex-col items-center w-6 shrink-0">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                          step.status === 'done'    ? 'bg-emerald-100 dark:bg-emerald-900/40' :
-                          step.status === 'error'   ? 'bg-red-100 dark:bg-red-900/40' :
-                          step.status === 'working' ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20' :
-                          'bg-gray-100 dark:bg-gray-800'
-                        }`}>
-                          {step.status === 'done'    && <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
-                          {step.status === 'error'   && <XCircle className="size-3.5 text-red-500" />}
-                          {step.status === 'working' && <Loader2 className="size-3 text-[#5C6BC0] animate-spin" />}
-                          {step.status === 'idle'    && <div className="size-2 rounded-full bg-gray-300 dark:bg-gray-600" />}
-                        </div>
-                        {!isLast && (
-                          <div className={`w-px flex-1 my-1 ${
-                            step.status === 'done' ? 'bg-emerald-200 dark:bg-emerald-800/50' : 'bg-gray-200 dark:bg-gray-700'
-                          }`} />
-                        )}
-                      </div>
-
-                      {/* Content */}
-                      <div className={`flex flex-col pb-4 ${isLast ? 'pb-0' : ''}`}>
-                        {step.status === 'idle' && (
-                          <span className="text-[12px] text-gray-400 dark:text-gray-600 leading-6">{step.label}</span>
-                        )}
-
-                        {step.status === 'working' && (
-                          <span className="text-[12px] text-gray-500 dark:text-gray-400 leading-6">
-                            Working on <span className="font-medium text-gray-700 dark:text-gray-200">{step.label}</span>…
-                          </span>
-                        )}
-
-                        {step.status === 'done' && (
-                          <div className="flex items-center gap-2 leading-6">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${doc.colors}`}>
-                              {step.label}
-                            </span>
-                            <span className="text-[12px] text-gray-500 dark:text-gray-400">created</span>
-                            {step.docId && (
-                              <span className="text-[12px] font-mono font-medium text-gray-800 dark:text-gray-100">{step.docId}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {step.status === 'error' && (
-                          <div className="flex items-center gap-2 leading-6">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800">
-                              {step.label}
-                            </span>
-                            <span className="text-[12px] text-red-500">failed</span>
-                          </div>
-                        )}
-                      </div>
+              return (
+                <div key={doc.label} className="flex gap-3">
+                  {/* Timeline spine */}
+                  <div className="flex flex-col items-center w-6 shrink-0">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                      doc.status === 'done'    ? 'bg-emerald-100 dark:bg-emerald-900/40' :
+                      doc.status === 'error'   ? 'bg-red-100 dark:bg-red-900/40' :
+                      doc.status === 'working' ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20' :
+                      'bg-gray-100 dark:bg-gray-800'
+                    }`}>
+                      {doc.status === 'done'    && <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
+                      {doc.status === 'error'   && <XCircle className="size-3.5 text-red-500" />}
+                      {doc.status === 'working' && <Loader2 className="size-3 text-[#5C6BC0] animate-spin" />}
+                      {(doc.status === 'idle' || doc.status === 'skipped') && <div className="size-2 rounded-full bg-gray-300 dark:bg-gray-600" />}
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+                    {!isLast && (
+                      <div className={`w-px flex-1 my-1 ${
+                        doc.status === 'done' ? 'bg-emerald-200 dark:bg-emerald-800/50' : 'bg-gray-200 dark:bg-gray-700'
+                      }`} />
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className={`flex flex-col pb-4 ${isLast ? 'pb-0' : ''}`}>
+                    {(doc.status === 'idle' || doc.status === 'skipped') && (
+                      <span className={`text-[12px] leading-6 ${doc.status === 'skipped' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-400 dark:text-gray-600'}`}>
+                        {doc.label}
+                      </span>
+                    )}
+
+                    {doc.status === 'working' && (
+                      <span className="text-[12px] text-gray-500 dark:text-gray-400 leading-6 flex items-center gap-2">
+                        Working on <span className="font-medium text-gray-700 dark:text-gray-200">{doc.label}</span>
+                        {doc.docIds.length > 0 && (
+                          <span className="text-[10px] text-[#5C6BC0] font-medium">{doc.docIds.length}/{doc.total}</span>
+                        )}
+                        {doc.retries > 0 && (
+                          <span className="text-[10px] text-amber-500 font-medium">retry {doc.retries}</span>
+                        )}
+                      </span>
+                    )}
+
+                    {doc.status === 'done' && (
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 leading-6">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${docDef.colors}`}>
+                            {doc.label}
+                          </span>
+                          <span className="text-[12px] text-gray-500 dark:text-gray-400">{doc.docIds.length > 1 ? `${doc.docIds.length} created` : 'created'}</span>
+                          {doc.retries > 0 && (
+                            <span className="text-[10px] text-amber-500">({doc.retries} retr{doc.retries === 1 ? 'y' : 'ies'})</span>
+                          )}
+                        </div>
+                        {/* Show ref IDs as pills */}
+                        {doc.docIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pl-0.5 pb-1">
+                            {doc.docIds.map((id, idx) => (
+                              <span key={idx} className="text-[11px] font-mono text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                                {id}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {doc.status === 'error' && (
+                      <div className="flex items-center gap-2 leading-6">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800">
+                          {doc.label}
+                        </span>
+                        <span className="text-[12px] text-red-500">failed</span>
+                        {doc.docIds.length > 0 && (
+                          <span className="text-[11px] text-gray-400">({doc.docIds.length}/{doc.total} created before failure)</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

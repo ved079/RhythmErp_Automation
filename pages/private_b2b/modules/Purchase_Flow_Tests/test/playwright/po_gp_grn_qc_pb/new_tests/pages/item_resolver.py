@@ -35,6 +35,8 @@ _FALLBACK = {
     "item_name": "CONNECTOR WAGO",
     "quantity": 15,
     "rate": 1000.0,
+    "rate_min": None,
+    "rate_max": None,
     "cqp_params": [
         {"param": "p1", "min_q": 0.0, "max_q": 1.0, "multiplier": 0.0, "slabs": [{"min_q": 0.0, "max_q": 1.0, "multiplier": 0.0, "is_pct": False}]},
         {"param": "p2", "min_q": 0.0, "max_q": 1.0, "multiplier": 0.0, "slabs": [{"min_q": 0.0, "max_q": 1.0, "multiplier": 0.0, "is_pct": False}]},
@@ -106,7 +108,12 @@ def _fetch_location_id(client, location_name):
 
 
 def _fetch_cbr_map(client, location_id):
-    """Returns {item_id: {"min": float, "max": float}} for items with CBR at location_id."""
+    """Returns {item_id: {"min": float, "max": float, "rate": float}} for items with CBR at location_id.
+
+    Reads item_rate (the configured base rate) and minimum_range/maximum_range from the first
+    child section only — subsequent children are rate-slab tables whose min/max values are
+    quantity ranges, not price ranges, and would corrupt the rate bounds.
+    """
     listing = client.list_entries("Commodity Base Rate", page_size=500)
     entries = (listing or {}).get("screenmatlistingdata_set") or (listing or {}).get("results") or []
     result = {}
@@ -117,13 +124,28 @@ def _fetch_cbr_map(client, location_id):
                 continue
             if int(detail.get("location_ref_id") or 0) != location_id:
                 continue
-            for child in detail.get("children", []):
-                for row in child.get("details", []):
-                    item_id = row.get("item_ref_id")
-                    mn = row.get("minimum_range")
-                    mx = row.get("maximum_range")
-                    if item_id and mn is not None and mx is not None:
-                        result[int(item_id)] = {"min": float(mn), "max": float(mx)}
+            children = detail.get("children", [])
+            # Only read from the first child — that's the "Define Item Rate Details" section.
+            # Later children are slab tables where min/max mean quantity, not price.
+            first_child = children[0] if children else None
+            if not first_child:
+                continue
+            for row in first_child.get("details", []):
+                item_id = row.get("item_ref_id")
+                if not item_id:
+                    continue
+                item_id = int(item_id)
+                raw_rate = row.get("item_rate") or row.get("rate")
+                mn = row.get("minimum_range")
+                mx = row.get("maximum_range")
+                try:
+                    rate = float(raw_rate) if raw_rate not in (None, "", "null") else None
+                    mn   = float(mn) if mn not in (None, "", "null") else None
+                    mx   = float(mx) if mx not in (None, "", "null") else None
+                except (TypeError, ValueError):
+                    continue
+                if item_id not in result:
+                    result[item_id] = {"min": mn, "max": mx, "rate": rate}
         except Exception:
             continue
     return result
@@ -207,7 +229,7 @@ def _fetch_qcp_map(client, candidate_item_ids):
     return result
 
 
-def resolve_chain_config(location_name="Pune"):
+def resolve_chain_config(location_name="Pune", item_name=None):
     """
     Returns a dict with all values needed for the PO→GP→GRN→QC flow:
       item_name, quantity, rate, cqp_params, per_bag_weight
@@ -254,10 +276,26 @@ def resolve_chain_config(location_name="Pune"):
             print(f"[RESOLVER] No items with both CBR + QCP at '{location_name}' — using fallback")
             return _FALLBACK.copy()
 
-        item_id = random.choice(qualified_ids)
+        if item_name is not None:
+            name_lower = item_name.strip().lower()
+            match = next((iid for iid in qualified_ids if item_map[iid].strip().lower() == name_lower), None)
+            if match is None:
+                match = next((iid for iid in set(cbr_map.keys()) & set(item_map.keys())
+                              if item_map[iid].strip().lower() == name_lower), None)
+            if match is None:
+                print(f"[RESOLVER] Item '{item_name}' not found with CBR+QCP — using fallback")
+                return _FALLBACK.copy()
+            item_id = match
+        else:
+            item_id = random.choice(qualified_ids)
         item_name = item_map[item_id]
         cbr = cbr_map[item_id]
-        rate = round(random.uniform(cbr["min"], cbr["max"]), 2)
+        if cbr.get("rate") is not None:
+            rate = round(cbr["rate"], 2)
+        elif cbr.get("min") is not None and cbr.get("max") is not None:
+            rate = round(random.uniform(cbr["min"], cbr["max"]), 2)
+        else:
+            rate = 1000.0
         quantity = random.randint(_QTY_MIN, _QTY_MAX)
         cqp_params = qcp_map[item_id]
         per_bag_weight = round(quantity * 0.04, 2)
@@ -270,6 +308,8 @@ def resolve_chain_config(location_name="Pune"):
             "item_name": item_name,
             "quantity": quantity,
             "rate": rate,
+            "rate_min": cbr.get("min"),
+            "rate_max": cbr.get("max"),
             "cqp_params": cqp_params,
             "per_bag_weight": per_bag_weight,
         }

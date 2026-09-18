@@ -1,7 +1,7 @@
 import os
 import sys
 import pytest
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 from playwright.sync_api import sync_playwright
 
 PROJECT_ROOT = os.path.abspath(
@@ -15,6 +15,20 @@ from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.grn_page import GRNPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.qc_page import QCPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.pb_page import PBPage
+
+_executor = ThreadPoolExecutor(max_workers=1)
+_resolve_future: Future = None
+
+
+def pytest_collection_finish(session):
+    """After collection: start the resolver only if chain_config is actually needed."""
+    global _resolve_future
+    needs_resolver = any(
+        "chain_config" in getattr(item, "fixturenames", [])
+        for item in session.items
+    )
+    if needs_resolver:
+        _resolve_future = _executor.submit(resolve_chain_config, location_name="Pune")
 
 LOGIN_URL = "https://rhythmerp.algorhythms.in"
 EMAIL     = "kedar@rhythmflows.com"
@@ -90,23 +104,33 @@ def flow_state():
     return {}
 
 
-@pytest.fixture(scope="session")
-def _chain_config_future():
-    """Kick off the API resolver in a background thread immediately at session start.
-
-    Runs concurrently with browser launch + login so there's no visible delay
-    before the first page appears. The future is resolved lazily when first accessed.
-    """
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(resolve_chain_config, location_name="Pune")
-    yield future
-    executor.shutdown(wait=False)
+@pytest.fixture(scope="class")
+def chain_config():
+    """Block until the background resolver (started at pytest_sessionstart) completes."""
+    return _resolve_future.result()
 
 
 @pytest.fixture(scope="class")
-def chain_config(_chain_config_future):
-    """Block until the background resolver completes and return its result."""
-    return _chain_config_future.result()
+def wago_config():
+    """Resolve rate/qty for CONNECTOR WAGO from CBR; actual_values are hardcoded."""
+    cfg = resolve_chain_config(location_name="Pune", item_name="CONNECTOR WAGO")
+    cfg["actual_values"] = [1]
+    return cfg
+
+
+@pytest.fixture(scope="session")
+def wago_configs():
+    """Pre-generated N configs from WAGO_CONFIGS env var (set by the FastAPI backend).
+
+    Falls back to a single resolved config when run standalone.
+    """
+    import json
+    raw = os.environ.get("WAGO_CONFIGS")
+    if raw:
+        return json.loads(raw)
+    cfg = resolve_chain_config(location_name="Pune", item_name="CONNECTOR WAGO")
+    cfg["actual_values"] = [1]
+    return [cfg]
 
 
 @pytest.fixture(scope="function")
