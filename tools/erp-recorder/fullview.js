@@ -48,7 +48,10 @@ function buildSummary(steps) {
     if (mDyn) {
       module = decodeURIComponent(mDyn[1]);
     } else {
-      const segs = url.replace(/[?#].*/, '').split('/').filter(Boolean);
+      // For hash-router URLs (/#/path/to/module), extract segments from the fragment
+      const hashMatch = url.match(/#\/(.+)/);
+      const pathStr = hashMatch ? hashMatch[1] : url.replace(/[?#].*/, '');
+      const segs = pathStr.split('/').filter(Boolean);
       module = segs.slice(-2).map(s => s.replace(/-/g, ' ')).join(' / ');
     }
   }
