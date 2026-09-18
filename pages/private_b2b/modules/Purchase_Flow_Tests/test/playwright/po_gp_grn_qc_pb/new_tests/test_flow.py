@@ -173,6 +173,13 @@ class TestPOGPGRNQCPBFlow:
 _MAX_RETRIES = 3
 
 
+def _hard_refresh(page_obj):
+    """Hard-reload the listing page (bypass cache) before starting the next creation."""
+    page_obj.page.keyboard.press("Control+Shift+R")
+    page_obj.page.wait_for_load_state("networkidle", timeout=15000)
+    page_obj.page.wait_for_timeout(500)
+
+
 def _confirmed_new(page_obj, prev_top):
     """Return new top ref_no if it differs from prev_top, else None."""
     ref_no = page_obj.get_ref_no_of_first_row()
@@ -328,6 +335,8 @@ class TestConnectorWagoBatchFlow:
         flow_state["wago_configs"] = wago_configs
         flow_state["po_refs"] = []
         for i, cfg in enumerate(wago_configs):
+            if i > 0:
+                _hard_refresh(po_page)
             prev_top = po_page.get_ref_no_of_first_row()
             print(f"PRE_TOP:PO:{prev_top}", flush=True)
             ref_no = None
@@ -357,6 +366,8 @@ class TestConnectorWagoBatchFlow:
     def test_batch_gp(self, gp_page, flow_state):
         flow_state["gp_refs"] = []
         for i, cfg in enumerate(flow_state["wago_configs"]):
+            if i > 0:
+                _hard_refresh(gp_page)
             prev_top = gp_page.get_ref_no_of_first_row()
             print(f"PRE_TOP:GP:{prev_top}", flush=True)
             ref_no = None
@@ -379,6 +390,8 @@ class TestConnectorWagoBatchFlow:
     def test_batch_grn(self, grn_page, flow_state):
         flow_state["grn_refs"] = []
         for i, cfg in enumerate(flow_state["wago_configs"]):
+            if i > 0:
+                _hard_refresh(grn_page)
             prev_top = grn_page.get_ref_no_of_first_row()
             print(f"PRE_TOP:GRN:{prev_top}", flush=True)
             ref_no = None
@@ -399,6 +412,8 @@ class TestConnectorWagoBatchFlow:
     def test_batch_qc(self, qc_page, flow_state):
         flow_state["qc_refs"] = []
         for i, cfg in enumerate(flow_state["wago_configs"]):
+            if i > 0:
+                _hard_refresh(qc_page)
             prev_top = qc_page.get_ref_no_of_first_row()
             print(f"PRE_TOP:QC:{prev_top}", flush=True)
             ref_no = None
@@ -430,6 +445,8 @@ class TestConnectorWagoBatchFlow:
 
     def test_batch_pb(self, pb_page, flow_state):
         for i in range(len(flow_state["wago_configs"])):
+            if i > 0:
+                _hard_refresh(pb_page)
             prev_top = pb_page.get_ref_no_of_first_row()
             print(f"PRE_TOP:PB:{prev_top}", flush=True)
             ref_no = None
