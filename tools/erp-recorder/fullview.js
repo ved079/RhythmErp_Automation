@@ -163,6 +163,29 @@ function patchedBlock(s) {
   return out;
 }
 
+// ── Helpers for #2 and #3 ────────────────────────────────────────────────
+
+// #2: is this step a Submit button inside a popup footer?
+function isSubmitStep(s) {
+  return s.type === 'button' &&
+    (s.code || '').includes('popup-footer') &&
+    (s.code || '').includes('Submit');
+}
+
+// #3: look backward from submitIdx for the last non-select computed field label
+// (either a standalone readonly step or a patched field from a select/input step)
+function findLastComputedFieldLabel(steps, submitIdx) {
+  for (let j = submitIdx - 1; j >= 0; j--) {
+    const s = steps[j];
+    if (s.patched && s.patched.length) {
+      const p = [...s.patched].reverse().find(p => !p.isSelect);
+      if (p) return p.label;
+    }
+    if (s.type === 'readonly' && !s.isSelect) return s.label;
+  }
+  return null;
+}
+
 function generateCode(steps) {
   if (!steps.length) return '# No steps recorded yet.';
 
@@ -210,6 +233,30 @@ function generateCode(steps) {
     else if (s.type === 'dialog-open')  lines.push(`# ── Dialog opened: "${s.label}" ──`);
     else if (s.type === 'dialog-close') lines.push(`# ── Dialog closed ──`);
     else if (s.type === 'tracking')     lines.push(`# ── PB tracking card ──`);
+
+    // ── #2: search step before row-trigger click ──────────────────────
+    if (s.type === 'button' && (s.code || '').includes('erp-row-trigger')) {
+      const m = s.code.match(/tr:has-text\('([^']+)'\)/);
+      if (m) {
+        const refNo = m[1].replace(/"/g, '\\"');
+        lines.push(`# [AI: filter the list before clicking the row — avoids ambiguous match when many rows exist]`);
+        lines.push(`if not page.locator("input#erpSearchInput").is_visible():`);
+        lines.push(`    page.locator("button[mattooltip='Search']").click()`);
+        lines.push(`page.locator("input#erpSearchInput").fill("${refNo}")`);
+        lines.push(`page.locator("input#erpSearchInput").press("Enter")`);
+        lines.push(`page.wait_for_timeout(1000)`);
+      }
+    }
+
+    // ── #3: computed-fields wait before Submit ────────────────────────
+    if (isSubmitStep(s)) {
+      const lbl = findLastComputedFieldLabel(steps, i);
+      if (lbl) {
+        const lp = lbl.replace(/'/g, "\\'");
+        lines.push(`# [AI: computed fields populate async — wait until non-empty before submitting]`);
+        lines.push(`expect(page.locator("xpath=//mat-label[contains(.,'${lp}')]/ancestor::mat-form-field//input").first).not_to_have_value("", timeout=10000)`);
+      }
+    }
 
     // ── Main code line + field-type hint ─────────────────────────────
     const hint = fieldTypeHint(s);
