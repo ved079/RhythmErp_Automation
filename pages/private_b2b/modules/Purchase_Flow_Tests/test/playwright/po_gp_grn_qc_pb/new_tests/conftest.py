@@ -1,6 +1,7 @@
 import os
 import sys
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from playwright.sync_api import sync_playwright
 
 PROJECT_ROOT = os.path.abspath(
@@ -9,7 +10,7 @@ PROJECT_ROOT = os.path.abspath(
 sys.path.insert(0, PROJECT_ROOT)
 
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.po_page import POPage
-from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.cbr_helper import get_random_rate
+from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.item_resolver import resolve_chain_config
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.gp_page import GPPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.grn_page import GRNPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.qc_page import QCPage
@@ -89,10 +90,23 @@ def flow_state():
     return {}
 
 
+@pytest.fixture(scope="session")
+def _chain_config_future():
+    """Kick off the API resolver in a background thread immediately at session start.
+
+    Runs concurrently with browser launch + login so there's no visible delay
+    before the first page appears. The future is resolved lazily when first accessed.
+    """
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(resolve_chain_config, location_name="Pune")
+    yield future
+    executor.shutdown(wait=False)
+
+
 @pytest.fixture(scope="class")
-def po_rate():
-    """Random rate within CBR-allowed range for CONNECTOR WAGO at Pune."""
-    return get_random_rate("CONNECTOR WAGO", "Pune")
+def chain_config(_chain_config_future):
+    """Block until the background resolver completes and return its result."""
+    return _chain_config_future.result()
 
 
 @pytest.fixture(scope="function")

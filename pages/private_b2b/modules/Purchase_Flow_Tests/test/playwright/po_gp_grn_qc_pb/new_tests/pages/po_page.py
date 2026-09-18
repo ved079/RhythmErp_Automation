@@ -97,6 +97,26 @@ class POPage(BasePlaywrightPage):
     def select_tax_rate(self, value):
         self._select_mat_by_text(self.TAX_RATE, str(value))
 
+    def select_random_tax_rate(self):
+        """Open Tax Rate dropdown, pick a random available option, return the selected text."""
+        import random
+        self.page.locator(self.TAX_RATE).first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        opts = self.page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option) span.mdc-list-item__primary-text"
+        ).all()
+        if not opts:
+            self.page.keyboard.press("Escape")
+            return None
+        choice = random.choice(opts)
+        text = choice.inner_text().strip()
+        choice.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        return text
+
     # ── Submit & search ───────────────────────────────────────────────────
 
     def submit(self):
