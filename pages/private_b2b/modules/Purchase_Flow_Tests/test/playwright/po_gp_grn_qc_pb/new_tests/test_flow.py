@@ -10,28 +10,34 @@ class TestPOGPGRNQCPBFlow:
         qty  = chain_config["quantity"]
         rate = chain_config["rate"]
 
-        po_page.open_add_form()
+        prev_top = po_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:PO:{prev_top}", flush=True)
 
-        po_page.select_supplier("Urban Harvest Ltd")
-        po_page.select_item_category("Raw material")
-        po_page.select_location("Pune")
-        po_page.select_department("Soyabean")
-        po_page.select_division("Trading")
-        po_page.select_type_of_sale("B2B")
-        po_page.select_delivery_terms("Delivery")
-
-        po_page.select_item_name(item)
-        po_page.fill_quantity(str(qty))
-        po_page.fill_rate(str(rate))
-
-        po_page.select_gst_type("IGST")
-        po_page.select_random_tax_rate()
-
-        po_page.submit()
-
-        ref_no = po_page.get_ref_no_of_first_row()
-        assert ref_no, "PO ref_no should not be empty"
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            po_page.open_add_form()
+            po_page.select_supplier("Urban Harvest Ltd")
+            po_page.select_item_category("Raw material")
+            po_page.select_location("Pune")
+            po_page.select_department("Soyabean")
+            po_page.select_division("Trading")
+            po_page.select_type_of_sale("B2B")
+            po_page.select_delivery_terms("Delivery")
+            po_page.select_item_name(item)
+            po_page.fill_quantity(str(qty))
+            po_page.fill_rate(str(rate))
+            po_page.select_gst_type("IGST")
+            po_page.select_random_tax_rate()
+            po_page.fill_expected_delivery_date()
+            po_page.submit()
+            ref_no = _confirmed_new(po_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:PO:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(po_page)
+        assert ref_no, f"PO not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["po_ref_no"] = ref_no
+        print(f"DOC_CREATED:PO:{ref_no}", flush=True)
 
     def test_verify_po(self, po_page, flow_state):
         cfg    = flow_state["chain_config"]
@@ -49,19 +55,26 @@ class TestPOGPGRNQCPBFlow:
         item = cfg["item_name"]
         qty  = cfg["quantity"]
 
-        gp_page.open_add_form()
+        prev_top = gp_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:GP:{prev_top}", flush=True)
 
-        gp_page.select_supplier("Urban Harvest Ltd")
-        gp_page.select_purchase_order(flow_state["po_ref_no"])
-        gp_page.select_item_name(item)
-        gp_page.fill_no_of_bags(str(qty))
-        gp_page.fill_quantity(str(qty))
-
-        gp_page.submit()
-
-        ref_no = gp_page.get_ref_no_of_first_row()
-        assert ref_no, "GP ref_no should not be empty"
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            gp_page.open_add_form()
+            gp_page.select_supplier("Urban Harvest Ltd")
+            gp_page.select_purchase_order(flow_state["po_ref_no"])
+            gp_page.select_item_name(item)
+            gp_page.fill_no_of_bags(str(qty))
+            gp_page.fill_quantity(str(qty))
+            gp_page.submit()
+            ref_no = _confirmed_new(gp_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:GP:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(gp_page)
+        assert ref_no, f"GP not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["gp_ref_no"] = ref_no
+        print(f"DOC_CREATED:GP:{ref_no}", flush=True)
 
     def test_verify_gp(self, gp_page, flow_state):
         cfg    = flow_state["chain_config"]
@@ -76,18 +89,24 @@ class TestPOGPGRNQCPBFlow:
     def test_create_grn(self, grn_page, flow_state):
         cfg = flow_state["chain_config"]
 
-        grn_page.open_add_form()
+        prev_top = grn_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:GRN:{prev_top}", flush=True)
 
-        grn_page.select_supplier("Urban Harvest Ltd")
-        grn_page.select_gate_pass(flow_state["gp_ref_no"])
-
-        grn_page.fill_received_quantity(str(cfg["quantity"]))
-
-        grn_page.submit()
-
-        ref_no = grn_page.get_ref_no_of_first_row()
-        assert ref_no, "GRN ref_no should not be empty"
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            grn_page.open_add_form()
+            grn_page.select_supplier("Urban Harvest Ltd")
+            grn_page.select_gate_pass(flow_state["gp_ref_no"])
+            grn_page.fill_received_quantity(str(cfg["quantity"]))
+            grn_page.submit()
+            ref_no = _confirmed_new(grn_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:GRN:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(grn_page)
+        assert ref_no, f"GRN not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["grn_ref_no"] = ref_no
+        print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
 
     def test_verify_grn(self, grn_page, flow_state):
         cfg    = flow_state["chain_config"]
@@ -146,19 +165,36 @@ class TestPOGPGRNQCPBFlow:
         qc_page.close_view()
 
     def test_create_pb(self, pb_page, flow_state):
-        qc_ref_no = flow_state["qc_ref_no"]
+        prev_top = pb_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:PB:{prev_top}", flush=True)
 
-        pb_page.open_add_form()
-        pb_page.select_supplier("Urban Harvest Ltd")
-        pb_page.select_qc(qc_ref_no)
-        pb_page.select_gst_type("IGST")
-        pb_page.select_gst_rate_any()
-
-        pb_page.submit()
-
-        ref_no = pb_page.get_ref_no_of_first_row()
-        assert ref_no, "PB ref_no should not be empty"
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            pb_page.open_add_form()
+            pb_page.select_supplier("Urban Harvest Ltd")
+            pb_page.select_qc(flow_state["qc_ref_no"])
+            pb_page.select_gst_type("IGST")
+            pb_page.select_gst_rate_any()
+            if not pb_page.computed_fields_ready():
+                print(f"RETRY:PB:{attempt} (computed fields empty — refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
+            try:
+                pb_page.submit()
+            except RuntimeError as e:
+                print(f"RETRY:PB:{attempt} (submit failed: {e} - refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
+            ref_no = _confirmed_new(pb_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:PB:{attempt} (ref unchanged - refreshing)", flush=True)
+            _hard_refresh(pb_page)
+        assert ref_no, f"PB not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["pb_ref_no"] = ref_no
+        print(f"DOC_CREATED:PB:{ref_no}", flush=True)
 
     def test_verify_pb(self, pb_page, flow_state):
         ref_no = flow_state["pb_ref_no"]
@@ -223,7 +259,8 @@ class TestConnectorWagoFlow:
             ref_no = _confirmed_new(po_page, prev_top)
             if ref_no:
                 break
-            print(f"RETRY:PO:{attempt}", flush=True)
+            print(f"RETRY:PO:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(po_page)
         assert ref_no, f"PO not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["po_ref_no"] = ref_no
         print(f"DOC_CREATED:PO:{ref_no}", flush=True)
@@ -245,7 +282,8 @@ class TestConnectorWagoFlow:
             ref_no = _confirmed_new(gp_page, prev_top)
             if ref_no:
                 break
-            print(f"RETRY:GP:{attempt}", flush=True)
+            print(f"RETRY:GP:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(gp_page)
         assert ref_no, f"GP not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["gp_ref_no"] = ref_no
         print(f"DOC_CREATED:GP:{ref_no}", flush=True)
@@ -265,7 +303,8 @@ class TestConnectorWagoFlow:
             ref_no = _confirmed_new(grn_page, prev_top)
             if ref_no:
                 break
-            print(f"RETRY:GRN:{attempt}", flush=True)
+            print(f"RETRY:GRN:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(grn_page)
         assert ref_no, f"GRN not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["grn_ref_no"] = ref_no
         print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
@@ -318,11 +357,23 @@ class TestConnectorWagoFlow:
             pb_page.select_qc(flow_state["qc_ref_no"])
             pb_page.select_gst_type("IGST")
             pb_page.select_gst_rate_any()
-            pb_page.submit()
+            if not pb_page.computed_fields_ready():
+                print(f"RETRY:PB:{attempt} (computed fields empty — refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
+            try:
+                pb_page.submit()
+            except RuntimeError as e:
+                print(f"RETRY:PB:{attempt} (submit failed: {e} - refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
             ref_no = _confirmed_new(pb_page, prev_top)
             if ref_no:
                 break
-            print(f"RETRY:PB:{attempt}", flush=True)
+            print(f"RETRY:PB:{attempt} (ref unchanged - refreshing)", flush=True)
+            _hard_refresh(pb_page)
         assert ref_no, f"PB not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["pb_ref_no"] = ref_no
         print(f"DOC_CREATED:PB:{ref_no}", flush=True)
@@ -347,7 +398,12 @@ class TestConnectorWagoBatchFlow:
             print(f"PRE_TOP:PO:{prev_top}", flush=True)
             ref_no = None
             for attempt in range(1, _MAX_RETRIES + 1):
-                po_page.open_add_form()
+                try:
+                    po_page.open_add_form()
+                except Exception as e:
+                    print(f"RETRY:PO[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    _hard_refresh(po_page)
+                    continue
                 po_page.select_supplier("Urban Harvest Ltd")
                 po_page.select_item_category("Raw material")
                 po_page.select_location("Pune")
@@ -365,7 +421,8 @@ class TestConnectorWagoBatchFlow:
                 ref_no = _confirmed_new(po_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:PO:{attempt}", flush=True)
+                print(f"RETRY:PO[{i+1}]:{attempt} (ref unchanged — refreshing)", flush=True)
+                _hard_refresh(po_page)
             assert ref_no, f"PO[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
             flow_state["po_refs"].append(ref_no)
             print(f"DOC_CREATED:PO:{ref_no}", flush=True)
@@ -379,7 +436,12 @@ class TestConnectorWagoBatchFlow:
             print(f"PRE_TOP:GP:{prev_top}", flush=True)
             ref_no = None
             for attempt in range(1, _MAX_RETRIES + 1):
-                gp_page.open_add_form()
+                try:
+                    gp_page.open_add_form()
+                except Exception as e:
+                    print(f"RETRY:GP[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    _hard_refresh(gp_page)
+                    continue
                 gp_page.select_supplier("Urban Harvest Ltd")
                 gp_page.select_purchase_order(flow_state["po_refs"][i])
                 gp_page.select_item_name(cfg["item_name"])
@@ -389,7 +451,8 @@ class TestConnectorWagoBatchFlow:
                 ref_no = _confirmed_new(gp_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:GP:{attempt}", flush=True)
+                print(f"RETRY:GP[{i+1}]:{attempt} (ref unchanged — refreshing)", flush=True)
+                _hard_refresh(gp_page)
             assert ref_no, f"GP[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
             flow_state["gp_refs"].append(ref_no)
             print(f"DOC_CREATED:GP:{ref_no}", flush=True)
@@ -403,7 +466,12 @@ class TestConnectorWagoBatchFlow:
             print(f"PRE_TOP:GRN:{prev_top}", flush=True)
             ref_no = None
             for attempt in range(1, _MAX_RETRIES + 1):
-                grn_page.open_add_form()
+                try:
+                    grn_page.open_add_form()
+                except Exception as e:
+                    print(f"RETRY:GRN[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    _hard_refresh(grn_page)
+                    continue
                 grn_page.select_supplier("Urban Harvest Ltd")
                 grn_page.select_gate_pass(flow_state["gp_refs"][i])
                 grn_page.fill_received_quantity(str(cfg["quantity"]))
@@ -411,21 +479,28 @@ class TestConnectorWagoBatchFlow:
                 ref_no = _confirmed_new(grn_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:GRN:{attempt}", flush=True)
+                print(f"RETRY:GRN[{i+1}]:{attempt} (ref unchanged — refreshing)", flush=True)
+                _hard_refresh(grn_page)
             assert ref_no, f"GRN[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
             flow_state["grn_refs"].append(ref_no)
             print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
 
-    def test_batch_qc(self, qc_page, flow_state):
+    def test_batch_qc_pb(self, qc_page, pb_page, flow_state):
+        """Interleaved: QC[i] then PB[i] for each chain before moving to i+1."""
         flow_state["qc_refs"] = []
         for i, cfg in enumerate(flow_state["wago_configs"]):
-            if i > 0:
-                _hard_refresh(qc_page)
+            # ── QC[i] ────────────────────────────────────────────────────────
+            qc_page.navigate_to_page()
             prev_top = qc_page.get_ref_no_of_first_row()
-            print(f"PRE_TOP:QC:{prev_top}", flush=True)
+            print(f"PRE_TOP:QC[{i+1}]:{prev_top}", flush=True)
             ref_no = None
             for attempt in range(1, _MAX_RETRIES + 1):
-                qc_page.open_add_form()
+                try:
+                    qc_page.open_add_form()
+                except Exception as e:
+                    print(f"RETRY:QC[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    _hard_refresh(qc_page)
+                    continue
                 qc_page.select_supplier("Urban Harvest Ltd")
                 qc_page.select_gate_pass(flow_state["gp_refs"][i])
                 qc_page.open_bags_detail()
@@ -441,10 +516,8 @@ class TestConnectorWagoBatchFlow:
                     qc_page.fill_actual_value(j, str(val))
                 qc_page.done_quality_params()
                 qc_page.close_quality_params_popup()
-                # Verify computed fields are populated before submitting.
-                # If empty (stale state from previous QC), cancel, hard-refresh and retry.
                 if not qc_page.computed_fields_ready():
-                    print(f"RETRY:QC:{attempt} (computed fields empty — refreshing)", flush=True)
+                    print(f"RETRY:QC[{i+1}]:{attempt} (computed fields empty — refreshing)", flush=True)
                     qc_page.cancel_form()
                     _hard_refresh(qc_page)
                     continue
@@ -452,28 +525,43 @@ class TestConnectorWagoBatchFlow:
                 ref_no = _confirmed_new(qc_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:QC:{attempt}", flush=True)
+                print(f"RETRY:QC[{i+1}]:{attempt}", flush=True)
             assert ref_no, f"QC[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
             flow_state["qc_refs"].append(ref_no)
-            print(f"DOC_CREATED:QC:{ref_no}", flush=True)
+            print(f"DOC_CREATED:QC[{i+1}]:{ref_no}", flush=True)
 
-    def test_batch_pb(self, pb_page, flow_state):
-        for i in range(len(flow_state["wago_configs"])):
-            if i > 0:
-                _hard_refresh(pb_page)
+            # ── PB[i] ────────────────────────────────────────────────────────
+            pb_page.navigate_to_page()
             prev_top = pb_page.get_ref_no_of_first_row()
-            print(f"PRE_TOP:PB:{prev_top}", flush=True)
+            print(f"PRE_TOP:PB[{i+1}]:{prev_top}", flush=True)
             ref_no = None
             for attempt in range(1, _MAX_RETRIES + 1):
-                pb_page.open_add_form()
+                try:
+                    pb_page.open_add_form()
+                except Exception as e:
+                    print(f"RETRY:PB[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    _hard_refresh(pb_page)
+                    continue
                 pb_page.select_supplier("Urban Harvest Ltd")
                 pb_page.select_qc(flow_state["qc_refs"][i])
                 pb_page.select_gst_type("IGST")
                 pb_page.select_gst_rate_any()
-                pb_page.submit()
+                if not pb_page.computed_fields_ready():
+                    print(f"RETRY:PB[{i+1}]:{attempt} (computed fields empty — refreshing)", flush=True)
+                    pb_page.cancel_form()
+                    _hard_refresh(pb_page)
+                    continue
+                try:
+                    pb_page.submit()
+                except RuntimeError as e:
+                    print(f"RETRY:PB[{i+1}]:{attempt} (submit failed: {e} — refreshing)", flush=True)
+                    pb_page.cancel_form()
+                    _hard_refresh(pb_page)
+                    continue
                 ref_no = _confirmed_new(pb_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:PB:{attempt}", flush=True)
+                print(f"RETRY:PB[{i+1}]:{attempt} (ref unchanged — refreshing)", flush=True)
+                _hard_refresh(pb_page)
             assert ref_no, f"PB[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
-            print(f"DOC_CREATED:PB:{ref_no}", flush=True)
+            print(f"DOC_CREATED:PB[{i+1}]:{ref_no}", flush=True)

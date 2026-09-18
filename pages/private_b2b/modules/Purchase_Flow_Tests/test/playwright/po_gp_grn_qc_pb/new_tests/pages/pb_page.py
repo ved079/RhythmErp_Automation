@@ -20,7 +20,9 @@ class PBPage(BasePlaywrightPage):
     ROW_TRIGGER  = "button.erp-row-trigger"
     REF_NO_COL   = "td.cdk-column-transaction_ref_no"
 
-    NET_PAYABLE  = "xpath=//mat-label[contains(.,'Net Payable Amount')]/ancestor::mat-form-field//input"
+    NET_PAYABLE       = "xpath=//mat-label[contains(.,'Net Payable Amount')]/ancestor::mat-form-field//input"
+    NET_PURCHASE_RATE = "xpath=//mat-label[contains(.,'Net Purchase Rate')]/ancestor::mat-form-field//input"
+    CANCEL_BTN        = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
 
     def navigate_to_page(self):
         self.page.goto(self.URL)
@@ -132,6 +134,26 @@ class PBPage(BasePlaywrightPage):
 
     def get_net_payable_amount(self):
         return self.page.locator(self.NET_PAYABLE).first.input_value()
+
+    def get_net_purchase_rate(self):
+        return self.page.locator(self.NET_PURCHASE_RATE).first.input_value()
+
+    def computed_fields_ready(self) -> bool:
+        """Return True if Net Payable Amount and Net Purchase Rate are both non-empty."""
+        try:
+            payable = self.page.locator(self.NET_PAYABLE).first.input_value()
+            rate    = self.page.locator(self.NET_PURCHASE_RATE).first.input_value()
+            return bool(payable and payable.strip() and rate and rate.strip())
+        except Exception:
+            return False
+
+    def cancel_form(self):
+        """Cancel / close the add form without saving."""
+        try:
+            self.page.locator(self.CANCEL_BTN).click()
+            self.page.wait_for_timeout(500)
+        except Exception:
+            self.force_close_popup()
 
     def _select_mat_by_text(self, selector, text):
         self.page.locator(selector).first.click(force=True)
