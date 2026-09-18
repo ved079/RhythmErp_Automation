@@ -71,7 +71,12 @@ class QCPage(BasePlaywrightPage):
     ACTUAL_VALUE    = "xpath=//mat-label[contains(.,'Actual Value')]/ancestor::mat-form-field//input"
 
     # ── Read-only computed fields ────────────────────────────────────────
-    QC_DEDUCTION_PCT = "xpath=//mat-label[contains(.,'QC Deduction %')]/ancestor::mat-form-field//input"
+    QC_DEDUCTION_PCT      = "xpath=//mat-label[contains(.,'QC Deduction %')]/ancestor::mat-form-field//input"
+    NET_PURCHASE_RATE     = "xpath=//mat-label[contains(.,'Net Purchase Rate')]/ancestor::mat-form-field//input"
+    NET_PURCHASE_AMOUNT   = "xpath=//mat-label[contains(.,'Net Purchase Amount')]/ancestor::mat-form-field//input"
+
+    # ── Cancel / close popup ─────────────────────────────────────────────
+    CANCEL_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
 
     # ── Detail opener buttons ─────────────────────────────────────────────
     BAGS_OPENER       = "button[data-sd-details-opener='qc_details[0].qc_bags_details']"
@@ -192,6 +197,23 @@ class QCPage(BasePlaywrightPage):
 
     def get_qc_deduction_pct(self):
         return self.page.locator(self.QC_DEDUCTION_PCT).input_value()
+
+    def computed_fields_ready(self) -> bool:
+        """Return True if Net Purchase Rate and Net Purchase Amount are both non-empty."""
+        try:
+            rate = self.page.locator(self.NET_PURCHASE_RATE).input_value()
+            amount = self.page.locator(self.NET_PURCHASE_AMOUNT).input_value()
+            return bool(rate and rate.strip() and amount and amount.strip())
+        except Exception:
+            return False
+
+    def cancel_form(self):
+        """Cancel / close the add form without saving."""
+        try:
+            self.page.locator(self.CANCEL_BTN).click()
+            self.page.wait_for_timeout(500)
+        except Exception:
+            self.force_close_popup()
 
     def get_gate_pass(self):
         return self.page.locator(self.GATE_PASS).text_content().strip()

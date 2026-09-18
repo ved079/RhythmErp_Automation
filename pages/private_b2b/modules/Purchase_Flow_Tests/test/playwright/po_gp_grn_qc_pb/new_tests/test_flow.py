@@ -293,6 +293,11 @@ class TestConnectorWagoFlow:
                 qc_page.fill_actual_value(i, str(val))
             qc_page.done_quality_params()
             qc_page.close_quality_params_popup()
+            if not qc_page.computed_fields_ready():
+                print(f"RETRY:QC:{attempt} (computed fields empty — refreshing)", flush=True)
+                qc_page.cancel_form()
+                _hard_refresh(qc_page)
+                continue
             qc_page.submit()
             ref_no = _confirmed_new(qc_page, prev_top)
             if ref_no:
@@ -436,6 +441,13 @@ class TestConnectorWagoBatchFlow:
                     qc_page.fill_actual_value(j, str(val))
                 qc_page.done_quality_params()
                 qc_page.close_quality_params_popup()
+                # Verify computed fields are populated before submitting.
+                # If empty (stale state from previous QC), cancel, hard-refresh and retry.
+                if not qc_page.computed_fields_ready():
+                    print(f"RETRY:QC:{attempt} (computed fields empty — refreshing)", flush=True)
+                    qc_page.cancel_form()
+                    _hard_refresh(qc_page)
+                    continue
                 qc_page.submit()
                 ref_no = _confirmed_new(qc_page, prev_top)
                 if ref_no:
