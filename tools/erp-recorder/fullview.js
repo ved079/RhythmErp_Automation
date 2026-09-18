@@ -235,16 +235,22 @@ function generateCode(steps) {
     else if (s.type === 'tracking')     lines.push(`# ── PB tracking card ──`);
 
     // ── #2: search step before row-trigger click ──────────────────────
+    // Only inject when the user didn't already record a search step for this ref
     if (s.type === 'button' && (s.code || '').includes('erp-row-trigger')) {
       const m = s.code.match(/tr:has-text\('([^']+)'\)/);
       if (m) {
-        const refNo = m[1].replace(/"/g, '\\"');
-        lines.push(`# [AI: filter the list before clicking the row — avoids ambiguous match when many rows exist]`);
-        lines.push(`if not page.locator("input#erpSearchInput").is_visible():`);
-        lines.push(`    page.locator("button[mattooltip='Search']").click()`);
-        lines.push(`page.locator("input#erpSearchInput").fill("${refNo}")`);
-        lines.push(`page.locator("input#erpSearchInput").press("Enter")`);
-        lines.push(`page.wait_for_timeout(1000)`);
+        const recentSearch = steps.slice(Math.max(0, i - 6), i).some(
+          ps => ps.type === 'search' || (ps.code || '').includes('erpSearchInput')
+        );
+        if (!recentSearch) {
+          const refNo = m[1].replace(/"/g, '\\"');
+          lines.push(`# [AI: filter the list before clicking the row — avoids ambiguous match when many rows exist]`);
+          lines.push(`if not page.locator("input#erpSearchInput").is_visible():`);
+          lines.push(`    page.locator("button[mattooltip='Search']").click()`);
+          lines.push(`page.locator("input#erpSearchInput").fill("${refNo}")`);
+          lines.push(`page.locator("input#erpSearchInput").press("Enter")`);
+          lines.push(`page.wait_for_timeout(1000)`);
+        }
       }
     }
 
@@ -265,6 +271,8 @@ function generateCode(steps) {
     } else {
       lines.push(s.code);
     }
+    // search steps need a settle wait after Enter
+    if (s.type === 'search') lines.push('page.wait_for_timeout(1000)');
 
     // ── Auto-patch inline block ───────────────────────────────────────
     patchedBlock(s).forEach(l => lines.push(l));
