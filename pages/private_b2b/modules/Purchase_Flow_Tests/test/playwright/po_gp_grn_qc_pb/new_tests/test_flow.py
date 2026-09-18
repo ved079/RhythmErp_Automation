@@ -498,7 +498,7 @@ class TestConnectorWagoBatchFlow:
                 try:
                     qc_page.open_add_form()
                 except Exception as e:
-                    print(f"RETRY:QC[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    print(f"RETRY:QC:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
                     _hard_refresh(qc_page)
                     continue
                 qc_page.select_supplier("Urban Harvest Ltd")
@@ -517,7 +517,7 @@ class TestConnectorWagoBatchFlow:
                 qc_page.done_quality_params()
                 qc_page.close_quality_params_popup()
                 if not qc_page.computed_fields_ready():
-                    print(f"RETRY:QC[{i+1}]:{attempt} (computed fields empty — refreshing)", flush=True)
+                    print(f"RETRY:QC:{attempt} (computed fields empty — refreshing)", flush=True)
                     qc_page.cancel_form()
                     _hard_refresh(qc_page)
                     continue
@@ -525,10 +525,10 @@ class TestConnectorWagoBatchFlow:
                 ref_no = _confirmed_new(qc_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:QC[{i+1}]:{attempt}", flush=True)
+                print(f"RETRY:QC:{attempt}", flush=True)
             assert ref_no, f"QC[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
             flow_state["qc_refs"].append(ref_no)
-            print(f"DOC_CREATED:QC[{i+1}]:{ref_no}", flush=True)
+            print(f"DOC_CREATED:QC:{ref_no}", flush=True)
 
             # ── PB[i] ────────────────────────────────────────────────────────
             pb_page.navigate_to_page()
@@ -539,7 +539,7 @@ class TestConnectorWagoBatchFlow:
                 try:
                     pb_page.open_add_form()
                 except Exception as e:
-                    print(f"RETRY:PB[{i+1}]:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
+                    print(f"RETRY:PB:{attempt} (open_add_form: {type(e).__name__} — refreshing)", flush=True)
                     _hard_refresh(pb_page)
                     continue
                 pb_page.select_supplier("Urban Harvest Ltd")
@@ -547,21 +547,21 @@ class TestConnectorWagoBatchFlow:
                 pb_page.select_gst_type("IGST")
                 pb_page.select_gst_rate_any()
                 if not pb_page.computed_fields_ready():
-                    print(f"RETRY:PB[{i+1}]:{attempt} (computed fields empty — refreshing)", flush=True)
+                    print(f"RETRY:PB:{attempt} (computed fields empty — refreshing)", flush=True)
                     pb_page.cancel_form()
                     _hard_refresh(pb_page)
                     continue
                 try:
                     pb_page.submit()
                 except RuntimeError as e:
-                    print(f"RETRY:PB[{i+1}]:{attempt} (submit failed: {e} — refreshing)", flush=True)
+                    print(f"RETRY:PB:{attempt} (submit failed: {e} — refreshing)", flush=True)
                     pb_page.cancel_form()
                     _hard_refresh(pb_page)
                     continue
                 ref_no = _confirmed_new(pb_page, prev_top)
                 if ref_no:
                     break
-                print(f"RETRY:PB[{i+1}]:{attempt} (ref unchanged — refreshing)", flush=True)
+                print(f"RETRY:PB:{attempt} (ref unchanged — refreshing)", flush=True)
                 _hard_refresh(pb_page)
             assert ref_no, f"PB[{i+1}] not confirmed after {_MAX_RETRIES} attempts"
-            print(f"DOC_CREATED:PB[{i+1}]:{ref_no}", flush=True)
+            print(f"DOC_CREATED:PB:{ref_no}", flush=True)

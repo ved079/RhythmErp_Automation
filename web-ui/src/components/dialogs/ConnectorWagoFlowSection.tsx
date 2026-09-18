@@ -8,11 +8,11 @@ import { Play, Loader2, CheckCircle2, XCircle, RotateCcw } from 'lucide-react'
 import { startConnectorWagoChain, type SSEEvent } from '@/lib/api'
 
 const DOCS = [
-  { label: 'PO',  step: 'test_create_po',  batchStep: 'test_batch_po',  colors: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-800' },
-  { label: 'GP',  step: 'test_create_gp',  batchStep: 'test_batch_gp',  colors: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
-  { label: 'GRN', step: 'test_create_grn', batchStep: 'test_batch_grn', colors: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
-  { label: 'QC',  step: 'test_create_qc',  batchStep: 'test_batch_qc',  colors: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
-  { label: 'PB',  step: 'test_create_pb',  batchStep: 'test_batch_pb',  colors: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
+  { label: 'PO',  step: 'test_create_po',  batchStep: 'test_batch_po',      colors: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-800' },
+  { label: 'GP',  step: 'test_create_gp',  batchStep: 'test_batch_gp',      colors: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
+  { label: 'GRN', step: 'test_create_grn', batchStep: 'test_batch_grn',     colors: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' },
+  { label: 'QC',  step: 'test_create_qc',  batchStep: 'test_batch_qc_pb',   colors: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+  { label: 'PB',  step: 'test_create_pb',  batchStep: 'test_batch_qc_pb',   colors: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800' },
 ]
 
 type DocStatus = 'idle' | 'working' | 'done' | 'error' | 'skipped'
@@ -53,7 +53,8 @@ export function ConnectorWagoFlowSection() {
     setDocs(initDocs)
     setRunning(true)
 
-    const batchSteps = activeDocs.map(d => d.batchStep)
+    // Deduplicate: QC and PB share test_batch_qc_pb — send it only once
+    const batchSteps = [...new Set(activeDocs.map(d => d.batchStep))]
 
     await startConnectorWagoChain(
       n,
@@ -65,21 +66,49 @@ export function ConnectorWagoFlowSection() {
         const docCreated = msg.match(/DOC_CREATED:(\w+):([^\s]+)/)
         if (docCreated) {
           const [, label, docId] = docCreated
-          setDocs(prev => prev.map(d => {
-            if (d.label !== label) return d
-            const newIds = [...d.docIds, docId.trim()]
-            // Mark done when all N for this doc are created; else keep working
-            const isDone = newIds.length >= d.total
-            if (isDone) {
-              // Advance next doc to working
-              const idx = activeDocsRef.current.indexOf(label)
-              if (idx >= 0 && idx < activeDocsRef.current.length - 1) {
-                const nextLabel = activeDocsRef.current[idx + 1]
-                setTimeout(() => patchDoc(nextLabel, { status: 'working' }), 0)
+          const docDef = DOCS.find(d => d.label === label)
+          setDocs(prev => {
+            // Update the matched doc
+            let updated = prev.map(d => {
+              if (d.label !== label) return d
+              const newIds = [...d.docIds, docId.trim()]
+              return { ...d, docIds: newIds, status: (newIds.length >= d.total ? 'done' : 'working') as DocStatus }
+            })
+            // If this doc just went from idle→working, also activate batchStep siblings
+            const wasIdle = prev.find(d => d.label === label)?.status === 'idle'
+            if (wasIdle && docDef) {
+              updated = updated.map(d => {
+                const def = DOCS.find(dd => dd.label === d.label)
+                if (def?.batchStep === docDef.batchStep && d.status === 'idle') {
+                  return { ...d, status: 'working' }
+                }
+                return d
+              })
+            }
+            // When all N for this doc are done, advance the next non-sibling doc
+            const updatedDoc = updated.find(d => d.label === label)
+            if (updatedDoc?.status === 'done' && docDef) {
+              const activeLabels = activeDocsRef.current
+              const idx = activeLabels.indexOf(label)
+              let nextIdx = idx + 1
+              while (nextIdx < activeLabels.length) {
+                const def = DOCS.find(d => d.label === activeLabels[nextIdx])
+                if (def?.batchStep !== docDef.batchStep) break
+                nextIdx++
+              }
+              if (nextIdx < activeLabels.length) {
+                const nextDef = DOCS.find(d => d.label === activeLabels[nextIdx])
+                updated = updated.map(d => {
+                  const def = DOCS.find(dd => dd.label === d.label)
+                  if (def?.batchStep === nextDef?.batchStep && d.status === 'idle') {
+                    return { ...d, status: 'working' }
+                  }
+                  return d
+                })
               }
             }
-            return { ...d, docIds: newIds, status: isDone ? 'done' : 'working' }
-          }))
+            return updated
+          })
           return
         }
 
@@ -90,17 +119,15 @@ export function ConnectorWagoFlowSection() {
           return
         }
 
-        // FAILED line
+        // FAILED line — mark all docs sharing this batchStep as error
         const failedM = msg.match(/::TestConnectorWagoBatchFlow::(test_batch_\w+)\s+FAILED/)
         if (failedM) {
           const failedBatchStep = failedM[1]
-          const doc = DOCS.find(d => d.batchStep === failedBatchStep)
-          if (doc) {
-            patchDoc(doc.label, { status: 'error' })
-            const idx = activeDocsRef.current.indexOf(doc.label)
-            for (let j = idx + 1; j < activeDocsRef.current.length; j++) {
-              patchDoc(activeDocsRef.current[j], { status: 'skipped' })
-            }
+          const failedDocs = DOCS.filter(d => d.batchStep === failedBatchStep && activeDocsRef.current.includes(d.label))
+          failedDocs.forEach(doc => patchDoc(doc.label, { status: 'error' }))
+          const firstIdx = Math.min(...failedDocs.map(d => activeDocsRef.current.indexOf(d.label)).filter(i => i >= 0))
+          for (let j = firstIdx + failedDocs.length; j < activeDocsRef.current.length; j++) {
+            patchDoc(activeDocsRef.current[j], { status: 'skipped' })
           }
         }
       },
