@@ -211,10 +211,16 @@ function generateCode(steps) {
     const phase = phaseOf(s.type);
 
     // ── Phase section header ──────────────────────────────────────────
+    // Determine if this step will actually emit any output (suppressed steps don't)
+    const willSuppress = s.type === 'button' &&
+      (s.code || '').includes("mattooltip='Search'") &&
+      nextStep && nextStep.type === 'search';
     if (phase !== lastPhase) {
-      if (lastPhase !== null) lines.push('');
-      lines.push(`# ${'═'.repeat(3)} ${phase} ${'═'.repeat(Math.max(0, 44 - phase.length))}`);
-      lastPhase = phase;
+      if (!willSuppress) {
+        if (lastPhase !== null) lines.push('');
+        lines.push(`# ${'═'.repeat(3)} ${phase} ${'═'.repeat(Math.max(0, 44 - phase.length))}`);
+        lastPhase = phase;
+      }
     } else if (prev && needsBlankLine(prev.type, s.type)) {
       lines.push('');
     }
