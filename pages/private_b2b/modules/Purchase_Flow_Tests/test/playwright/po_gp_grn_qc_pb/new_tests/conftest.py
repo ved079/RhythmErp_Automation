@@ -9,6 +9,7 @@ PROJECT_ROOT = os.path.abspath(
 sys.path.insert(0, PROJECT_ROOT)
 
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.po_page import POPage
+from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.cbr_helper import get_random_rate
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.gp_page import GPPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.grn_page import GRNPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.qc_page import QCPage
@@ -86,6 +87,12 @@ def logged_in_page(browser_context):
 def flow_state():
     """Shared dict for threading ref_nos between steps in a class-scoped flow test."""
     return {}
+
+
+@pytest.fixture(scope="class")
+def po_rate():
+    """Random rate within CBR-allowed range for CONNECTOR WAGO at Pune."""
+    return get_random_rate("CONNECTOR WAGO", "Pune")
 
 
 @pytest.fixture(scope="function")

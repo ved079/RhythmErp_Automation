@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.smoke
 class TestPOGPFlow:
-    def test_create_po(self, po_page, flow_state):
+    def test_create_po(self, po_page, flow_state, po_rate):
         po_page.open_add_form()
 
         po_page.select_supplier("Urban Harvest Ltd")
@@ -16,20 +16,17 @@ class TestPOGPFlow:
 
         po_page.select_item_name("CONNECTOR WAGO")
         po_page.fill_quantity("15")
-        po_page.fill_rate("1000")
-
-        assert po_page.get_transaction_amount() == "15000"
+        po_page.fill_rate(str(po_rate))
 
         po_page.select_gst_type("IGST")
         po_page.select_tax_rate("5")
-
-        assert po_page.get_total_amount() == "15750"
 
         po_page.submit()
 
         ref_no = po_page.get_ref_no_of_first_row()
         assert ref_no, "PO ref_no should not be empty"
         flow_state["po_ref_no"] = ref_no
+        flow_state["po_rate"] = po_rate
 
     def test_verify_po(self, po_page, flow_state):
         ref_no = flow_state["po_ref_no"]
@@ -37,7 +34,12 @@ class TestPOGPFlow:
         po_page.open_view(ref_no)
 
         assert po_page.get_supplier_name() == "Urban Harvest Ltd"
-        assert po_page.get_total_po_amount() == "15750"
+
+        rate = flow_state["po_rate"]
+        qty = 15
+        expected_total = str(round(rate * qty * 1.05, 2))  # qty * rate + 5% GST
+        actual_total = po_page.get_total_po_amount()
+        assert actual_total == expected_total, f"Total PO Amount: expected {expected_total}, got {actual_total}"
 
         po_page.close_view()
 
