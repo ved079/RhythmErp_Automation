@@ -322,7 +322,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
 
 
 _ALL_STEPS = ["test_create_po", "test_create_gp", "test_create_grn", "test_create_qc", "test_create_pb"]
-_ALL_BATCH_STEPS = ["test_batch_po", "test_batch_gp", "test_batch_grn", "test_batch_qc", "test_batch_pb"]
+_ALL_BATCH_STEPS = ["test_batch_po", "test_batch_gp", "test_batch_grn", "test_batch_qc_pb"]
 # Map from batch step name → index (mirrors _ALL_STEPS order)
 _BATCH_STEP_IDX = {s: i for i, s in enumerate(_ALL_BATCH_STEPS)}
 
