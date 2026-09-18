@@ -218,6 +218,7 @@ class TestConnectorWagoFlow:
             po_page.fill_rate(str(cfg["rate"]))
             po_page.select_gst_type("IGST")
             po_page.select_random_tax_rate()
+            po_page.fill_expected_delivery_date()
             po_page.submit()
             ref_no = _confirmed_new(po_page, prev_top)
             if ref_no:
@@ -354,6 +355,7 @@ class TestConnectorWagoBatchFlow:
                 po_page.fill_rate(str(cfg["rate"]))
                 po_page.select_gst_type("IGST")
                 po_page.select_random_tax_rate()
+                po_page.fill_expected_delivery_date()
                 po_page.submit()
                 ref_no = _confirmed_new(po_page, prev_top)
                 if ref_no:

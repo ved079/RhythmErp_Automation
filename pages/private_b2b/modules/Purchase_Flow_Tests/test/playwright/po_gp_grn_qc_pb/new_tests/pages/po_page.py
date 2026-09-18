@@ -1,3 +1,4 @@
+from datetime import date
 from pages.base_playwright_page import BasePlaywrightPage
 
 BASE_URL = "https://rhythmerp.algorhythms.in"
@@ -28,6 +29,9 @@ class POPage(BasePlaywrightPage):
     TOTAL_PO_AMOUNT       = "xpath=//mat-label[contains(.,'Total PO Amount')]/ancestor::mat-form-field//input"
     TRANSACTION_CURRENCY  = "xpath=//mat-label[contains(.,'Transaction Currency')]/ancestor::mat-form-field//mat-select"
     SUPPLIER_REF_TYPE     = "xpath=//mat-label[contains(.,'Supplier Ref. Type')]/ancestor::mat-form-field//mat-select"
+
+    # ── Date fields ──────────────────────────────────────────────────────
+    EXPECTED_DELIVERY_DATE = "xpath=//mat-label[contains(.,'Expected Delivery Date')]/ancestor::mat-form-field//input[@matinput]"
 
     # ── Buttons ──────────────────────────────────────────────────────────
     ADD_BTN    = "button.erp-add-btn"
@@ -77,6 +81,13 @@ class POPage(BasePlaywrightPage):
 
     def select_delivery_terms(self, value):
         self._select_mat_by_text(self.DELIVERY_TERMS, value)
+
+    def fill_expected_delivery_date(self):
+        today = date.today().strftime("%d/%m/%Y")
+        loc = self.page.locator(self.EXPECTED_DELIVERY_DATE)
+        loc.click()
+        loc.fill(today)
+        self.page.keyboard.press("Tab")
 
     # ── Item row actions ──────────────────────────────────────────────────
 
