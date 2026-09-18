@@ -138,6 +138,10 @@ class QCPage(BasePlaywrightPage):
         self.page.locator(self.QC_PARAMS_OPENER).click()
         self.page.locator(self.ACTUAL_VALUE).first.wait_for(state="visible", timeout=10000)
 
+    def count_actual_value_inputs(self):
+        """Return number of visible Actual Value inputs currently in the form."""
+        return self.page.locator(self.ACTUAL_VALUE).count()
+
     def fill_actual_value(self, row_index, value):
         """Fill actual_value for quality parameter at row_index (0-based)."""
         self.page.locator(self.ACTUAL_VALUE).nth(row_index).fill(str(value))

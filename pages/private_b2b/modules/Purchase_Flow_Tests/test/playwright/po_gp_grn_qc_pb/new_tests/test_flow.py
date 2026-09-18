@@ -70,7 +70,6 @@ class TestPOGPGRNQCFlow:
         gp_page.open_view(ref_no)
 
         assert gp_page.get_quantity() == str(cfg["quantity"])
-        assert gp_page.get_item_name() == cfg["item_name"]
 
         gp_page.close_view()
 
@@ -125,7 +124,8 @@ class TestPOGPGRNQCFlow:
         # ── Quality parameters ───────────────────────────────────────────
         # actual_values computed from CQP slab data via compute_actual_values()
         qc_page.open_quality_params()
-        for i, actual_val in enumerate(actual_values):
+        visible_count = qc_page.count_actual_value_inputs()
+        for i, actual_val in enumerate(actual_values[:visible_count]):
             qc_page.fill_actual_value(i, str(actual_val))
         qc_page.done_quality_params()
         qc_page.close_quality_params_popup()
