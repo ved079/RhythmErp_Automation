@@ -54,11 +54,10 @@ class POPage(BasePlaywrightPage):
 
     def select_supplier(self, name):
         self._select_mat_by_text(self.SUPPLIER_NAME, name)
-        self.page.locator(self.SUPPLIER_REF_TYPE).wait_for(state="visible", timeout=10000)
 
     def select_item_category(self, value):
         self._select_mat_by_text(self.ITEM_CATEGORY, value)
-        self.page.locator(self.LOCATION).wait_for(state="visible", timeout=10000)
+        self.page.locator(self.SUPPLIER_REF_TYPE).wait_for(state="visible", timeout=10000)
 
     def select_location(self, value):
         self._select_mat_by_text(self.LOCATION, value)
@@ -89,13 +88,6 @@ class POPage(BasePlaywrightPage):
     def fill_quantity(self, value):
         self.page.locator(self.QUANTITY).first.fill(str(value))
 
-    def click_save(self):
-        btn = self.page.locator(self.SAVE_BTN)
-        btn.wait_for(state="visible", timeout=15000)
-        btn.scroll_into_view_if_needed()
-        btn.click(force=True)
-        self.page.wait_for_timeout(1000)
-
     def fill_rate(self, value):
         self.page.locator(self.RATE).first.fill(str(value))
 
@@ -110,6 +102,7 @@ class POPage(BasePlaywrightPage):
     def submit(self):
         self.page.locator(self.SUBMIT_BTN).click()
         self.handle_success_alert()
+        self.navigate_to_page()
 
     def search(self, ref_no):
         if not self.page.locator(self.SEARCH_INPUT).is_visible():
@@ -125,12 +118,25 @@ class POPage(BasePlaywrightPage):
         self.page.wait_for_timeout(1000)
 
     def close_view(self):
-        self.page.get_by_role("button", name="close").click()
+        self.force_close_popup()
 
     # ── Read values ───────────────────────────────────────────────────────
 
+    def get_ref_no_of_first_row(self):
+        self.page.wait_for_selector(self.REF_NO_COL, timeout=15000)
+        return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
+
+    def get_transaction_amount(self):
+        return self.page.locator("xpath=//mat-label[contains(.,'Transaction Amount')]/ancestor::mat-form-field//input").input_value()
+
+    def get_total_amount(self):
+        return self.page.locator("xpath=//mat-label[contains(.,'Total Amount')]/ancestor::mat-form-field//input").input_value()
+
     def get_total_po_amount(self):
         return self.page.locator(self.TOTAL_PO_AMOUNT).input_value()
+
+    def get_supplier_name(self):
+        return self.page.locator(self.SUPPLIER_NAME).text_content().strip()
 
     def get_item_name(self):
         return self.page.locator(self.ITEM_NAME).text_content().strip()
@@ -140,11 +146,15 @@ class POPage(BasePlaywrightPage):
 
     def handle_success_alert(self):
         self.page.wait_for_selector(".swal2-container", timeout=8000)
+        title = self.page.locator("#swal2-title").inner_text().strip()
+        message = self.page.locator("#swal2-html-container").inner_text().strip()
         self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
         try:
             self.page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
         except Exception:
             pass
+        if any(k in title for k in ("Validation", "Failed", "Error")):
+            raise RuntimeError(f"PO submit failed — {title}: {message}")
 
     def _select_mat_by_text(self, selector, text):
         self.page.locator(selector).first.click(force=True)
