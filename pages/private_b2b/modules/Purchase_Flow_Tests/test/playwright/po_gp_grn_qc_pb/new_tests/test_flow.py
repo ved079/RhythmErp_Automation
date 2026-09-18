@@ -168,3 +168,93 @@ class TestPOGPGRNQCPBFlow:
         assert pb_page.get_net_payable_amount(), "Net Payable Amount should not be empty"
 
         pb_page.close_view()
+
+
+@pytest.mark.smoke
+class TestConnectorWagoFlow:
+    """PO→GP→GRN→QC→PB with CONNECTOR WAGO — create only, no verify steps.
+    Rate/qty resolved from CBR; item and actual_values are hardcoded."""
+
+    def test_create_po(self, po_page, flow_state, wago_config):
+        flow_state["wago_config"] = wago_config
+        cfg = wago_config
+        po_page.open_add_form()
+        po_page.select_supplier("Urban Harvest Ltd")
+        po_page.select_item_category("Raw material")
+        po_page.select_location("Pune")
+        po_page.select_department("Soyabean")
+        po_page.select_division("Trading")
+        po_page.select_type_of_sale("B2B")
+        po_page.select_delivery_terms("Delivery")
+        po_page.select_item_name(cfg["item_name"])
+        po_page.fill_quantity(str(cfg["quantity"]))
+        po_page.fill_rate(str(cfg["rate"]))
+        po_page.select_gst_type("IGST")
+        po_page.select_random_tax_rate()
+        po_page.submit()
+        ref_no = po_page.get_ref_no_of_first_row()
+        assert ref_no, "PO ref_no should not be empty"
+        flow_state["po_ref_no"] = ref_no
+        print(f"DOC_CREATED:PO:{ref_no}", flush=True)
+
+    def test_create_gp(self, gp_page, flow_state):
+        cfg = flow_state["wago_config"]
+        gp_page.open_add_form()
+        gp_page.select_supplier("Urban Harvest Ltd")
+        gp_page.select_purchase_order(flow_state["po_ref_no"])
+        gp_page.select_item_name(cfg["item_name"])
+        gp_page.fill_no_of_bags(str(cfg["quantity"]))
+        gp_page.fill_quantity(str(cfg["quantity"]))
+        gp_page.submit()
+        ref_no = gp_page.get_ref_no_of_first_row()
+        assert ref_no, "GP ref_no should not be empty"
+        flow_state["gp_ref_no"] = ref_no
+        print(f"DOC_CREATED:GP:{ref_no}", flush=True)
+
+    def test_create_grn(self, grn_page, flow_state):
+        cfg = flow_state["wago_config"]
+        grn_page.open_add_form()
+        grn_page.select_supplier("Urban Harvest Ltd")
+        grn_page.select_gate_pass(flow_state["gp_ref_no"])
+        grn_page.fill_received_quantity(str(cfg["quantity"]))
+        grn_page.submit()
+        ref_no = grn_page.get_ref_no_of_first_row()
+        assert ref_no, "GRN ref_no should not be empty"
+        flow_state["grn_ref_no"] = ref_no
+        print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
+
+    def test_create_qc(self, qc_page, flow_state):
+        cfg = flow_state["wago_config"]
+        qc_page.open_add_form()
+        qc_page.select_supplier("Urban Harvest Ltd")
+        qc_page.select_gate_pass(flow_state["gp_ref_no"])
+        qc_page.open_bags_detail()
+        qc_page.select_type_of_bag("test")
+        qc_page.fill_no_of_bags("1")
+        qc_page.fill_per_bag_weight(str(cfg["per_bag_weight"]))
+        qc_page.done_bags()
+        qc_page.open_quality_params()
+        visible_count = qc_page.count_actual_value_inputs()
+        vals = cfg["actual_values"]
+        padded = (vals + [vals[-1]] * (visible_count - len(vals)))[:visible_count]
+        for i, val in enumerate(padded):
+            qc_page.fill_actual_value(i, str(val))
+        qc_page.done_quality_params()
+        qc_page.close_quality_params_popup()
+        qc_page.submit()
+        ref_no = qc_page.get_ref_no_of_first_row()
+        assert ref_no, "QC ref_no should not be empty"
+        flow_state["qc_ref_no"] = ref_no
+        print(f"DOC_CREATED:QC:{ref_no}", flush=True)
+
+    def test_create_pb(self, pb_page, flow_state):
+        pb_page.open_add_form()
+        pb_page.select_supplier("Urban Harvest Ltd")
+        pb_page.select_qc(flow_state["qc_ref_no"])
+        pb_page.select_gst_type("IGST")
+        pb_page.select_gst_rate_any()
+        pb_page.submit()
+        ref_no = pb_page.get_ref_no_of_first_row()
+        assert ref_no, "PB ref_no should not be empty"
+        flow_state["pb_ref_no"] = ref_no
+        print(f"DOC_CREATED:PB:{ref_no}", flush=True)

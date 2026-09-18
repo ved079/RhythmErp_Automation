@@ -441,6 +441,46 @@ export async function startPurchaseChain(
   }
 }
 
+// ─── Connector WAGO Chain ───────────────────────────────
+
+export async function startConnectorWagoChain(
+  count: number,
+  onEvent: (event: SSEEvent) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+  steps?: string[],
+) {
+  try {
+    const res = await fetch(`${PROXY}?path=connector-wago-chain`, withCsrf({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count, steps: steps ?? null }),
+    }))
+
+    if (!res.ok || !res.body) { onError(new Error(`HTTP ${res.status}`)); return }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try { onEvent(JSON.parse(line.slice(6))) } catch { /* skip */ }
+        }
+      }
+    }
+    onDone()
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)))
+  }
+}
+
 // ─── PB Concurrency Test ────────────────────────────────
 
 export async function startPbConcurrencyTest(

@@ -319,3 +319,99 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         failed=failed,
         total=total_chains,
     ))
+
+
+_ALL_STEPS = ["test_create_po", "test_create_gp", "test_create_grn", "test_create_qc", "test_create_pb"]
+
+
+def connector_wago_chain_stream(count: int, steps: list[str] | None = None) -> Generator[str, None, None]:
+    """Run TestConnectorWagoFlow via pytest N times, streaming output as SSE.
+
+    Args:
+        count: Number of flow repetitions.
+        steps: Specific test methods to run (e.g. ["test_create_po", "test_create_gp"]).
+               Defaults to all 5 steps.
+    """
+    import subprocess
+
+    valid_steps = [s for s in (steps or _ALL_STEPS) if s in _ALL_STEPS]
+    if not valid_steps:
+        valid_steps = _ALL_STEPS
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    test_path = os.path.join(
+        project_root,
+        "pages", "private_b2b", "modules", "Purchase_Flow_Tests",
+        "test", "playwright", "po_gp_grn_qc_pb", "new_tests", "test_flow.py",
+    )
+    total = max(1, min(count, 20))
+    created = 0
+    failed = 0
+    start_ts = datetime.now(timezone.utc)
+    step_labels = [s.replace("test_create_", "").upper() for s in valid_steps]
+
+    yield _sse_event(LogEvent(
+        type="log",
+        message=f"Starting {total} CONNECTOR WAGO flow(s) — steps: {' → '.join(step_labels)}",
+        timestamp=start_ts,
+    ))
+
+    for i in range(total):
+        run_start = time.time()
+        yield _sse_event(LogEvent(
+            type="log",
+            message=f"Chain [{i + 1}/{total}] — running TestConnectorWagoFlow",
+            timestamp=datetime.now(timezone.utc),
+        ))
+        try:
+            test_ids = [f"{test_path}::TestConnectorWagoFlow::{s}" for s in valid_steps]
+            proc = subprocess.Popen(
+                [
+                    "python", "-m", "pytest",
+                    *test_ids,
+                    "-v", "-s", "--tb=short", "-p", "no:warnings",
+                ],
+                cwd=project_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line:
+                    yield _sse_event(LogEvent(type="log", message=line, timestamp=datetime.now(timezone.utc)))
+            proc.wait()
+            elapsed = time.time() - run_start
+            if proc.returncode == 0:
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message=f"Chain [{i + 1}] OK ({elapsed:.1f}s)",
+                    timestamp=datetime.now(timezone.utc),
+                ))
+                created += 1
+            else:
+                yield _sse_event(LogEvent(
+                    type="error",
+                    message=f"Chain [{i + 1}] FAILED (exit {proc.returncode}, {elapsed:.1f}s)",
+                    timestamp=datetime.now(timezone.utc),
+                ))
+                failed += 1
+        except Exception as e:
+            elapsed = time.time() - run_start
+            yield _sse_event(LogEvent(
+                type="error",
+                message=f"Chain [{i + 1}] FAILED after {elapsed:.1f}s: {e}",
+                timestamp=datetime.now(timezone.utc),
+            ))
+            failed += 1
+
+    total_elapsed = (datetime.now(timezone.utc) - start_ts).total_seconds()
+    yield _sse_event(LogEvent(
+        type="run_end",
+        message=f"Done — {created} chains created, {failed} failed ({total_elapsed:.1f}s)",
+        timestamp=datetime.now(timezone.utc),
+        created=created,
+        failed=failed,
+        total=total,
+    ))

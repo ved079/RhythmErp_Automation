@@ -27,10 +27,10 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     userIcon: true,
     defaultExpanded: true,
     children: [
-      { id: 'member', label: 'Member', badge: '26 tests', badgeType: 'success' as const },
-      { id: 'directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'register-charges', label: 'Register Charges', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'register-of-loan', label: 'Register of Loan', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'doc-member', label: 'Member', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'doc-directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'doc-register-charges', label: 'Register Charges', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'doc-register-of-loan', label: 'Register of Loan', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'constituent-documents', label: 'Constituent Documents', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'miscellaneous-documents', label: 'Miscellaneous Documents', badge: '📝 No tests', badgeType: 'none' as const },
     ],
@@ -47,6 +47,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
         defaultExpanded: true,
         children: [
           { id: 'full-purchase-flow', label: 'Full Purchase Flow' },
+          { id: 'full-purchase-flow-UIcreate', label: 'Connector WAGO Flow' },
           { id: 'full-purchase-flow-jv', label: 'Full Purchase Flow + JV Check' },
           { id: 'qc-formula-check', label: 'QC Formula Validator' },
           { id: 'purchase-chain-concurrency', label: 'Concurrency Test' },

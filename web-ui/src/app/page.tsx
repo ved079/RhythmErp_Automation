@@ -59,6 +59,7 @@ const TestRunnerTab = dynamic(() => import('@/components/test-runner/TestRunnerT
 const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveExecutionTab').then(m => ({ default: m.LiveExecutionTab })), { ssr: false })
 const ScheduleRunsTab = dynamic(() => import('@/components/schedule/ScheduleRunsTab').then(m => ({ default: m.ScheduleRunsTab })), { ssr: false })
 const PurchaseChainSection = dynamic(() => import('@/components/dialogs/PurchaseChainSection').then(m => ({ default: m.PurchaseChainSection })), { ssr: false })
+const ConnectorWagoFlowSection = dynamic(() => import('@/components/dialogs/ConnectorWagoFlowSection').then(m => ({ default: m.ConnectorWagoFlowSection })), { ssr: false })
 const JVCheckSection = dynamic(() => import('@/components/dialogs/JVCheckSection').then(m => ({ default: m.JVCheckSection })), { ssr: false })
 const QCFormulaSection = dynamic(() => import('@/components/dialogs/QCFormulaSection').then(m => ({ default: m.QCFormulaSection })), { ssr: false })
 const QCPBCrossCheck = dynamic(() => import('@/components/dialogs/QCPBCrossCheck').then(m => ({ default: m.QCPBCrossCheck })), { ssr: false })
@@ -1059,29 +1060,31 @@ export default function Home() {
           {selectedModule === 'deployment-check' && (
             <DeploymentCheckTab erpToken={erpToken} erpTenantId={erpTenantId} credentials={erpCredentials} activeCredId={activeCredId} getPassword={(id) => credPasswords.current[id] || ''} />
           )}
-          {(selectedModule === 'full-purchase-flow' || selectedModule === 'full-purchase-flow-jv') && (
+          {(selectedModule === 'full-purchase-flow' || selectedModule === 'full-purchase-flow-jv' || selectedModule === 'full-purchase-flow-UIcreate') && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
                 <div className="flex items-center h-10 px-4 gap-0">
                   <div className="flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900">
                     <Package className="size-4 text-[#3F51B5]" />
                     <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">
-                      {selectedModule === 'full-purchase-flow-jv' ? 'Purchase Chain + JV Check' : 'Purchase Chain'}
+                      {selectedModule === 'full-purchase-flow-jv' ? 'Purchase Chain + JV Check' : selectedModule === 'full-purchase-flow-UIcreate' ? 'Connector WAGO Flow' : 'Purchase Chain'}
                     </h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={startAppTour}
-                    data-tour="pc-help"
-                    title="Guide: how this screen works"
-                    className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 cursor-pointer"
-                  >
-                    <HelpCircle className="size-3.5" />
-                    Need help?
-                  </button>
+                  {selectedModule !== 'full-purchase-flow-UIcreate' && (
+                    <button
+                      type="button"
+                      onClick={startAppTour}
+                      data-tour="pc-help"
+                      title="Guide: how this screen works"
+                      className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 cursor-pointer"
+                    >
+                      <HelpCircle className="size-3.5" />
+                      Need help?
+                    </button>
+                  )}
                   <div className="flex-1" />
                   <span className="text-[12px] text-gray-400 dark:text-gray-500">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">
-                    {selectedModule === 'full-purchase-flow-jv' ? 'Full Purchase Flow + JV Check' : 'Full Purchase Flow'}
+                    {selectedModule === 'full-purchase-flow-jv' ? 'Full Purchase Flow + JV Check' : selectedModule === 'full-purchase-flow-UIcreate' ? 'Connector WAGO Flow' : 'Full Purchase Flow'}
                   </span></span>
                 </div>
               </div>
@@ -1094,6 +1097,9 @@ export default function Home() {
                     onClearToken={onClearToken}
                     userId={user?.id}
                   />
+                )}
+                {selectedModule === 'full-purchase-flow-UIcreate' && (
+                  <ConnectorWagoFlowSection />
                 )}
                 {selectedModule === 'full-purchase-flow-jv' && (
                   <JVCheckSection
@@ -1160,7 +1166,7 @@ export default function Home() {
           {activeTab === 'concurrency' && (
             <ConcurrencyTab modules={sidebarModules} />
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'qc-formula-check' && selectedModule !== 'credentials' && selectedModule !== 'purchase-chain-concurrency' && activeTab !== 'concurrency' && (
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'full-purchase-flow-UIcreate' && selectedModule !== 'qc-formula-check' && selectedModule !== 'credentials' && selectedModule !== 'purchase-chain-concurrency' && activeTab !== 'concurrency' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
