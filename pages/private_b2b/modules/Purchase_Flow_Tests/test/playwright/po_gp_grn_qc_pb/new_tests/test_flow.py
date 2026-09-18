@@ -3,7 +3,7 @@ from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_
 
 
 @pytest.mark.smoke
-class TestPOGPGRNQCFlow:
+class TestPOGPGRNQCPBFlow:
     def test_create_po(self, po_page, flow_state, chain_config):
         flow_state["chain_config"] = chain_config
         item = chain_config["item_name"]
@@ -144,3 +144,27 @@ class TestPOGPGRNQCFlow:
         assert qc_page.get_qc_deduction_pct(), "QC Deduction % should not be empty"
 
         qc_page.close_view()
+
+    def test_create_pb(self, pb_page, flow_state):
+        qc_ref_no = flow_state["qc_ref_no"]
+
+        pb_page.open_add_form()
+        pb_page.select_supplier("Urban Harvest Ltd")
+        pb_page.select_qc(qc_ref_no)
+        pb_page.select_gst_type("IGST")
+        pb_page.select_gst_rate_any()
+
+        pb_page.submit()
+
+        ref_no = pb_page.get_ref_no_of_first_row()
+        assert ref_no, "PB ref_no should not be empty"
+        flow_state["pb_ref_no"] = ref_no
+
+    def test_verify_pb(self, pb_page, flow_state):
+        ref_no = flow_state["pb_ref_no"]
+        pb_page.search(ref_no)
+        pb_page.open_view(ref_no)
+
+        assert pb_page.get_net_payable_amount(), "Net Payable Amount should not be empty"
+
+        pb_page.close_view()
