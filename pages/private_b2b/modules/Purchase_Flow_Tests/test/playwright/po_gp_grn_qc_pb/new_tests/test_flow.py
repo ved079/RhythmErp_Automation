@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.smoke
-class TestPOGPFlow:
+class TestPOGPGRNFlow:
     def test_create_po(self, po_page, flow_state, po_rate):
         po_page.open_add_form()
 
@@ -67,3 +67,28 @@ class TestPOGPFlow:
         assert gp_page.get_item_name() == "CONNECTOR WAGO"
 
         gp_page.close_view()
+
+    def test_create_grn(self, grn_page, flow_state):
+        grn_page.open_add_form()
+
+        grn_page.select_supplier("Urban Harvest Ltd")
+        grn_page.select_gate_pass(flow_state["gp_ref_no"])
+
+        grn_page.fill_received_quantity("15")
+
+        grn_page.submit()
+
+        ref_no = grn_page.get_ref_no_of_first_row()
+        assert ref_no, "GRN ref_no should not be empty"
+        flow_state["grn_ref_no"] = ref_no
+
+    def test_verify_grn(self, grn_page, flow_state):
+        ref_no = flow_state["grn_ref_no"]
+        grn_page.search(ref_no)
+        grn_page.open_view(ref_no)
+
+        assert grn_page.get_grn_ref_no() == ref_no
+        assert grn_page.get_gate_pass_no() == flow_state["gp_ref_no"]
+        assert grn_page.get_received_quantity() == "15"
+
+        grn_page.close_view()
