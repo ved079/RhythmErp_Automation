@@ -265,11 +265,20 @@ function generateCode(steps) {
     }
 
     // ── Main code line + field-type hint ─────────────────────────────
-    const hint = fieldTypeHint(s);
-    if (hint && !s.code.includes('\n')) {
-      lines.push(s.code + hint);
-    } else {
-      lines.push(s.code);
+    // Suppress the standalone Search button click when the next step is a
+    // search step (the search step already includes the if-not-visible guard)
+    const nextStep = steps[i + 1];
+    const isRedundantSearchBtn = s.type === 'button' &&
+      (s.code || '').includes("mattooltip='Search'") &&
+      nextStep && nextStep.type === 'search';
+
+    if (!isRedundantSearchBtn) {
+      const hint = fieldTypeHint(s);
+      if (hint && !s.code.includes('\n')) {
+        lines.push(s.code + hint);
+      } else {
+        lines.push(s.code);
+      }
     }
     // search steps need a settle wait after Enter
     if (s.type === 'search') lines.push('page.wait_for_timeout(1000)');
