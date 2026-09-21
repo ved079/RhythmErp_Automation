@@ -51,6 +51,7 @@ const FOLDER_TO_SIDEBAR_FALLBACK: Record<string, string> = {
   quality_check: 'quality-check',
   direct_pb_flow: 'direct-pb-flow',
   po_qc_pb_flow: 'po-qc-pb-flow',
+  po_gp_grn_qc_pb: 'po-gp-grn-qc-pb-flow',
 }
 
 const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: string | null }> = {
