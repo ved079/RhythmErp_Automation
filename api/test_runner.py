@@ -50,7 +50,7 @@ ALLOWED_SUB_MODULES = {
     # purchase flows
     "direct_pb_flow",
     "po_qc_pb_flow",
-    "po_gp_grn_qc_pb_flow",
+    "po_gp_grn_qc_pb",
     # common_settings
     "bank", "designation", "error_code_mst", "hsn_sac", "season",
     "tax_authority", "tax_rate", "uom", "uom_conversion", "vehicle_master",
@@ -83,7 +83,7 @@ def build_pytest_path(module: str, sub_module: str = None) -> str:
         p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright" / sub_module
         if p.exists():
             return str(p)
-    if module == 'private_b2b' and sub_module == 'po_gp_grn_qc_pb_flow':
+    if module == 'private_b2b' and sub_module == 'po_gp_grn_qc_pb':
         p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/po_gp_grn_qc_pb/new_tests"
         if p.exists():
             return str(p)

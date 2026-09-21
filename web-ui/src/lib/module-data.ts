@@ -96,7 +96,7 @@ const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: st
   'quality-check': { module: 'private_b2b', subModule: 'quality_check' },
   'direct-pb-flow':        { module: 'private_b2b', subModule: 'direct_pb_flow' },
   'po-qc-pb-flow':         { module: 'private_b2b', subModule: 'po_qc_pb_flow' },
-  'po-gp-grn-qc-pb-flow':  { module: 'private_b2b', subModule: 'po_gp_grn_qc_pb_flow' },
+  'po-gp-grn-qc-pb-flow':  { module: 'private_b2b', subModule: 'po_gp_grn_qc_pb' },
   // Document sub-modules
   'doc-member':           { module: 'documents', subModule: 'member' },
   'doc-directors':        { module: 'documents', subModule: 'directors' },
