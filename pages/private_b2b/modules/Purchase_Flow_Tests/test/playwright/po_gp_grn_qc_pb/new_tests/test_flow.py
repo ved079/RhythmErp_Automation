@@ -461,6 +461,162 @@ class TestConnectorWagoFlow:
         print(f"DOC_CREATED:PB:{ref_no}", flush=True)
 
 
+_FARMER_NAME  = "K T"
+_FARMER_ITEM  = "CONNECTOR WAGO"
+_FARMER_BAGS  = "100"
+_FARMER_QTY   = "1000"
+
+
+@pytest.mark.smoke
+class TestFarmerGPGRNQCPBFlow:
+    """GP→GRN→QC→PB flow with a Farmer supplier (no PO, no GST on PB).
+
+    Farmers are not GST-registered so PB skips GST Type / GST Rate entirely.
+    """
+
+    def test_create_gp(self, gp_page, flow_state):
+        prev_top = gp_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:GP:{prev_top}", flush=True)
+
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            gp_page.open_add_form()
+            gp_page.select_supplier(_FARMER_NAME)
+            gp_page.select_item_category("Raw material")
+            gp_page.select_delivery_terms("Spot")
+            gp_page.fill_distance_km("1")
+            gp_page.select_location("Pune")
+            gp_page.select_department("Soyabean")
+            gp_page.select_division("Trading")
+            gp_page.select_type_of_sale("B2B")
+            gp_page.select_item_name(_FARMER_ITEM)
+            gp_page.fill_no_of_bags(_FARMER_BAGS)
+            gp_page.fill_quantity(_FARMER_QTY)
+            gp_page.submit()
+            ref_no = _confirmed_new(gp_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:GP:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(gp_page)
+        assert ref_no, f"Farmer GP not confirmed after {_MAX_RETRIES} attempts"
+        flow_state["gp_ref_no"] = ref_no
+        print(f"DOC_CREATED:GP:{ref_no}", flush=True)
+
+    def test_create_grn(self, grn_page, flow_state):
+        prev_top = grn_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:GRN:{prev_top}", flush=True)
+
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            grn_page.open_add_form()
+            grn_page.select_supplier(_FARMER_NAME)
+            grn_page.select_gate_pass(flow_state["gp_ref_no"])
+            grn_page.submit()
+            ref_no = _confirmed_new(grn_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:GRN:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(grn_page)
+        assert ref_no, f"Farmer GRN not confirmed after {_MAX_RETRIES} attempts"
+        flow_state["grn_ref_no"] = ref_no
+        print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
+
+    def test_create_qc(self, qc_page, flow_state):
+        prev_top = qc_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:QC:{prev_top}", flush=True)
+
+        actual_values = [1]
+
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            qc_page.open_add_form()
+            qc_page.select_supplier(_FARMER_NAME)
+            qc_page.select_gate_pass(flow_state["gp_ref_no"])
+            qc_page.open_bags_detail()
+            qc_page.select_type_of_bag("test")
+            qc_page.fill_no_of_bags("1")
+            qc_page.fill_per_bag_weight("1")
+            qc_page.done_bags()
+            qc_page.open_quality_params()
+            visible_count = qc_page.count_actual_value_inputs()
+            padded = (actual_values + [actual_values[-1]] * (visible_count - len(actual_values)))[:visible_count]
+            for i, val in enumerate(padded):
+                qc_page.fill_actual_value(i, str(val))
+            qc_page.done_quality_params()
+            qc_page.close_quality_params_popup()
+            if not qc_page.computed_fields_ready():
+                print(f"RETRY:QC:{attempt} (computed fields empty — refreshing)", flush=True)
+                qc_page.cancel_form()
+                _hard_refresh(qc_page)
+                continue
+            qc_page.submit()
+            ref_no = _confirmed_new(qc_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:QC:{attempt}", flush=True)
+        assert ref_no, f"Farmer QC not confirmed after {_MAX_RETRIES} attempts"
+        flow_state["qc_ref_no"] = ref_no
+        print(f"DOC_CREATED:QC:{ref_no}", flush=True)
+
+    def test_create_pb(self, pb_page, flow_state):
+        """Farmer PB — no GST Type / GST Rate (farmers are non-GST registered)."""
+        prev_top = pb_page.get_ref_no_of_first_row()
+        print(f"PRE_TOP:PB:{prev_top}", flush=True)
+
+        ref_no = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            pb_page.open_add_form()
+            pb_page.select_supplier(_FARMER_NAME)
+            pb_page.select_qc(flow_state["qc_ref_no"])
+            if not pb_page.computed_fields_ready():
+                print(f"RETRY:PB:{attempt} (computed fields empty — refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
+            try:
+                pb_page.submit()
+            except RuntimeError as e:
+                print(f"RETRY:PB:{attempt} (submit failed: {e} — refreshing)", flush=True)
+                pb_page.cancel_form()
+                _hard_refresh(pb_page)
+                continue
+            ref_no = _confirmed_new(pb_page, prev_top)
+            if ref_no:
+                break
+            print(f"RETRY:PB:{attempt} (ref unchanged — refreshing)", flush=True)
+            _hard_refresh(pb_page)
+        assert ref_no, f"Farmer PB not confirmed after {_MAX_RETRIES} attempts"
+        flow_state["pb_ref_no"] = ref_no
+        print(f"DOC_CREATED:PB:{ref_no}", flush=True)
+
+    def test_verify_closed_status(self, gp_page, grn_page, qc_page, flow_state):
+        """After PB: QC → GRN → GP should all show Closed status."""
+        gp_ref  = flow_state["gp_ref_no"]
+        grn_ref = flow_state["grn_ref_no"]
+        qc_ref  = flow_state["qc_ref_no"]
+
+        qc_page.navigate_to_page()
+        qc_page.search(qc_ref)
+        qc_status = qc_page.page.locator(
+            f"tr:has-text('{qc_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert qc_status == "Closed", f"QC Purchase Booking Status: expected 'Closed', got '{qc_status}'"
+
+        grn_page.navigate_to_page()
+        grn_page.search(grn_ref)
+        grn_status = grn_page.page.locator(
+            f"tr:has-text('{grn_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert grn_status == "Closed", f"GRN QC Status: expected 'Closed', got '{grn_status}'"
+
+        gp_page.navigate_to_page()
+        gp_page.search(gp_ref)
+        gp_status = gp_page.page.locator(
+            f"tr:has-text('{gp_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert gp_status == "Closed", f"GP GRN Status: expected 'Closed', got '{gp_status}'"
+
+
 @pytest.mark.smoke
 class TestConnectorWagoBatchFlow:
     """Batch mode: create all N POs first, then all N GPs, then GRNs, QCs, PBs.

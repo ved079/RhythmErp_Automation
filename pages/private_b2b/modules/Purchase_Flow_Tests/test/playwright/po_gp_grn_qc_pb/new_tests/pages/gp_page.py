@@ -10,6 +10,13 @@ class GPPage(BasePlaywrightPage):
     SUPPLIER_NAME   = "xpath=//mat-label[contains(.,'Supplier Name')]/ancestor::mat-form-field//mat-select"
     SUPPLIER_TYPE   = "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
     PURCHASE_ORDER  = "xpath=//mat-label[contains(.,'Purchase Order')]/ancestor::mat-form-field//mat-select"
+    ITEM_CATEGORY   = "xpath=//mat-label[contains(.,'Item Category')]/ancestor::mat-form-field//mat-select"
+    DELIVERY_TERMS  = "xpath=//mat-label[contains(.,'Delivery Terms')]/ancestor::mat-form-field//mat-select"
+    DISTANCE_KM     = "xpath=//mat-label[contains(.,'Distance(KM)')]/ancestor::mat-form-field//input"
+    LOCATION        = "xpath=//mat-label[contains(.,'Location')]/ancestor::mat-form-field//mat-select"
+    DEPARTMENT      = "xpath=//mat-label[contains(.,'Department')]/ancestor::mat-form-field//mat-select"
+    DIVISION        = "xpath=//mat-label[contains(.,'Division')]/ancestor::mat-form-field//mat-select"
+    TYPE_OF_SALE    = "xpath=//mat-label[contains(.,'Type of Sale')]/ancestor::mat-form-field//mat-select"
 
     # ── Item row selectors ───────────────────────────────────────────────
     ITEM_NAME  = "xpath=//mat-label[contains(.,'Item Name')]/ancestor::mat-form-field//mat-select"
@@ -46,6 +53,30 @@ class GPPage(BasePlaywrightPage):
 
     def select_purchase_order(self, po_ref_no):
         self._select_mat_by_text(self.PURCHASE_ORDER, po_ref_no)
+
+    def select_item_category(self, value):
+        self._select_mat_by_text(self.ITEM_CATEGORY, value)
+
+    def select_delivery_terms(self, value):
+        self._select_mat_by_text(self.DELIVERY_TERMS, value)
+
+    def fill_distance_km(self, value):
+        self.page.locator(self.DISTANCE_KM).first.fill(str(value))
+
+    def select_location(self, value):
+        self._select_mat_by_text(self.LOCATION, value)
+        self.page.locator(self.DEPARTMENT).wait_for(state="visible", timeout=10000)
+
+    def select_department(self, value):
+        self._select_mat_by_text(self.DEPARTMENT, value)
+        self.page.locator(self.DIVISION).wait_for(state="visible", timeout=10000)
+
+    def select_division(self, value):
+        self._select_mat_by_text(self.DIVISION, value)
+        self.page.locator(self.TYPE_OF_SALE).wait_for(state="visible", timeout=10000)
+
+    def select_type_of_sale(self, value):
+        self._select_mat_by_text(self.TYPE_OF_SALE, value)
 
     # ── Item row actions ──────────────────────────────────────────────────
 
