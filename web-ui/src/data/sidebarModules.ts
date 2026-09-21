@@ -63,8 +63,9 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
         label: 'Purchase Flows',
         defaultExpanded: true,
         children: [
-          { id: 'direct-pb-flow',  label: 'Direct PB Flow',      badge: '📝 No tests', badgeType: 'none' as const },
-          { id: 'po-qc-pb-flow',   label: 'PO → QC → PB Flow',   badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'direct-pb-flow',        label: 'Direct PB Flow',           badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'po-qc-pb-flow',         label: 'PO → QC → PB Flow',        badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'po-gp-grn-qc-pb-flow',  label: 'PO → GP → GRN → QC → PB', badge: '📝 No tests', badgeType: 'none' as const },
         ],
       },
     ],
