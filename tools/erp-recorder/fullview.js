@@ -315,6 +315,7 @@ function esc(s) {
 
 let currentSteps = [];
 let isRecording  = false;
+let userEditedCode = false;  // true when user has manually edited the code pane
 
 function render(steps, recording) {
   currentSteps = steps || [];
@@ -355,8 +356,13 @@ function render(steps, recording) {
     list.scrollTop = list.scrollHeight;
   }
 
-  document.getElementById('code-out').value = generateCode(currentSteps);
+  if (!userEditedCode) {
+    document.getElementById('code-out').value = generateCode(currentSteps);
+  }
 }
+
+// Mark as user-edited when they type in the code pane; clear flag when steps change
+document.getElementById('code-out').addEventListener('input', () => { userEditedCode = true; });
 
 // ── Communicate with the recording tab ───────────────────────────────────
 // fullview is its own tab; we query ALL tabs but stop after the first response.
@@ -383,19 +389,28 @@ document.getElementById('btn-toggle').addEventListener('click', () => {
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
+  userEditedCode = false;
   chrome.storage.local.set({ erp_steps: [], erp_recording: false });
   sendToRecordingTab({ type: 'CLEAR' }, () => {});
   render([], false);
 });
 
 document.getElementById('btn-restart').addEventListener('click', () => {
+  userEditedCode = false;
   chrome.storage.local.set({ erp_steps: [], erp_recording: true });
   sendToRecordingTab({ type: 'RESTART' }, () => {});
   render([], true);
 });
 
+document.getElementById('btn-regen').addEventListener('click', () => {
+  userEditedCode = false;
+  document.getElementById('code-out').value = generateCode(currentSteps);
+});
+
 document.getElementById('btn-copy').addEventListener('click', () => {
-  navigator.clipboard.writeText(generateCode(currentSteps)).then(() => {
+  // Copy whatever is currently in the textarea (may be user-edited)
+  const text = document.getElementById('code-out').value;
+  navigator.clipboard.writeText(text).then(() => {
     const btn = document.getElementById('btn-copy');
     const orig = btn.textContent;
     btn.textContent = 'Copied!'; btn.classList.add('copied');
