@@ -321,7 +321,9 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
     ))
 
 
-_ALL_STEPS = ["test_create_po", "test_create_gp", "test_create_grn", "test_create_qc", "test_create_pb"]
+_ALL_STEPS      = ["test_create_po", "test_create_gp", "test_create_grn", "test_create_qc", "test_create_pb"]
+_ALL_FLOW_STEPS = ["test_create_po", "test_create_gp", "test_create_grn", "test_create_qc", "test_create_pb"]
+_ALL_FLOW_BATCH_STEPS = ["test_batch_po", "test_batch_gp", "test_batch_grn", "test_batch_qc", "test_batch_pb"]
 _ALL_BATCH_STEPS = ["test_batch_po", "test_batch_gp", "test_batch_grn", "test_batch_qc_pb"]
 # Map from batch step name → index (mirrors _ALL_STEPS order)
 _BATCH_STEP_IDX = {s: i for i, s in enumerate(_ALL_BATCH_STEPS)}
@@ -463,4 +465,117 @@ def connector_wago_chain_stream(count: int, steps: list[str] | None = None) -> G
             created=0,
             failed=total,
             total=total,
+        ))
+
+
+def _generate_flow_configs(count: int) -> list[dict]:
+    """Like _generate_wago_configs but picks a random qualifying item from CBR (no item_name filter)."""
+    import random
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.item_resolver import resolve_chain_config
+
+    base = resolve_chain_config(location_name="Pune")  # random item
+    base.setdefault("actual_values", [1])
+
+    configs = [base]
+    rate_min = base.get("rate_min")
+    rate_max = base.get("rate_max")
+    for _ in range(count - 1):
+        qty = random.randint(_QTY_MIN, _QTY_MAX)
+        if rate_min is not None and rate_max is not None:
+            rate = round(random.uniform(rate_min, rate_max), 2)
+        else:
+            rate = base["rate"]
+        configs.append({
+            **base,
+            "quantity": qty,
+            "rate": rate,
+            "per_bag_weight": round(qty * 0.04, 2),
+        })
+    return configs
+
+
+def po_gp_grn_qc_pb_flow_stream(count: int, steps: list[str] | None = None) -> Generator[str, None, None]:
+    """Run TestPOGPGRNQCPBBatchFlow via pytest once for all N chains, streaming output as SSE."""
+    import subprocess
+
+    incoming = steps or []
+    valid_batch = [s for s in incoming if s in _ALL_FLOW_BATCH_STEPS]
+    if not valid_batch:
+        valid_batch = _ALL_FLOW_BATCH_STEPS
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    test_path = os.path.join(
+        project_root,
+        "pages", "private_b2b", "modules", "Purchase_Flow_Tests",
+        "test", "playwright", "po_gp_grn_qc_pb", "new_tests", "test_flow.py",
+    )
+    total = max(1, min(count, 20))
+    start_ts = datetime.now(timezone.utc)
+    step_labels = [s.replace("test_batch_", "").upper() for s in valid_batch]
+
+    yield _sse_event(LogEvent(
+        type="log",
+        message=f"Starting {total} PO→GP→GRN→QC→PB chain(s) — steps: {' → '.join(step_labels)}",
+        timestamp=start_ts,
+    ))
+
+    try:
+        configs = _generate_flow_configs(total)
+        yield _sse_event(LogEvent(
+            type="log",
+            message=f"Configs ready — item={configs[0]['item_name']}, qty range=[{_QTY_MIN},{_QTY_MAX}]",
+            timestamp=datetime.now(timezone.utc),
+        ))
+    except Exception as e:
+        yield _sse_event(LogEvent(
+            type="error",
+            message=f"Config generation failed: {e}",
+            timestamp=datetime.now(timezone.utc),
+        ))
+        return
+
+    test_ids = [f"{test_path}::TestPOGPGRNQCPBBatchFlow::{s}" for s in valid_batch]
+
+    env = os.environ.copy()
+    env["FLOW_CONFIGS"] = json.dumps(configs)
+    env["FLOW_COUNT"] = str(total)
+
+    run_start = time.time()
+    try:
+        proc = subprocess.Popen(
+            ["python", "-m", "pytest", *test_ids, "-v", "-s", "-x", "--tb=short", "-p", "no:warnings"],
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                yield _sse_event(LogEvent(type="log", message=line, timestamp=datetime.now(timezone.utc)))
+        proc.wait()
+        total_elapsed = (datetime.now(timezone.utc) - start_ts).total_seconds()
+        if proc.returncode == 0:
+            yield _sse_event(LogEvent(
+                type="run_end",
+                message=f"Done — {total} chains created ({total_elapsed:.1f}s)",
+                timestamp=datetime.now(timezone.utc),
+                created=total, failed=0, total=total,
+            ))
+        else:
+            yield _sse_event(LogEvent(
+                type="run_end",
+                message=f"Done with errors (exit {proc.returncode}, {total_elapsed:.1f}s)",
+                timestamp=datetime.now(timezone.utc),
+                created=0, failed=total, total=total,
+            ))
+    except Exception as e:
+        yield _sse_event(LogEvent(
+            type="run_end",
+            message=f"Fatal error: {e}",
+            timestamp=datetime.now(timezone.utc),
+            created=0, failed=total, total=total,
         ))

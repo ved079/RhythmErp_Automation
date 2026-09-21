@@ -119,6 +119,28 @@ def wago_config():
 
 
 @pytest.fixture(scope="session")
+def flow_configs():
+    """Pre-generated N configs from FLOW_CONFIGS env var (set by FastAPI). Falls back via FLOW_COUNT."""
+    import json as _json
+    raw = os.environ.get("FLOW_CONFIGS")
+    if raw:
+        return _json.loads(raw)
+    import random
+    cfg = resolve_chain_config(location_name="Pune")
+    cfg.setdefault("actual_values", [1])
+    count = int(os.environ.get("FLOW_COUNT", "1"))
+    if count <= 1:
+        return [cfg]
+    configs = [cfg]
+    for _ in range(count - 1):
+        qty = random.randint(10, 50)
+        rate_min, rate_max = cfg.get("rate_min"), cfg.get("rate_max")
+        rate = round(random.uniform(rate_min, rate_max), 2) if rate_min and rate_max else cfg["rate"]
+        configs.append({**cfg, "quantity": qty, "rate": rate, "per_bag_weight": round(qty * 0.04, 2)})
+    return configs
+
+
+@pytest.fixture(scope="session")
 def wago_configs():
     """Pre-generated N configs from WAGO_CONFIGS env var (set by the FastAPI backend).
 

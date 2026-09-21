@@ -78,8 +78,12 @@ def validate_module_path(module: str, sub_module: str = None) -> None:
 def build_pytest_path(module: str, sub_module: str = None) -> str:
     """Build the filesystem path to run pytest on."""
     # Special cases: Purchase_Flow_Tests live in a non-standard nested path
-    if module == 'private_b2b' and sub_module in ('direct_pb_flow', 'po_qc_pb_flow'):
-        p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright" / sub_module
+    if module == 'private_b2b' and sub_module == 'direct_pb_flow':
+        p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/direct_pb_flow"
+        if p.exists():
+            return str(p)
+    if module == 'private_b2b' and sub_module == 'po_qc_pb_flow':
+        p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/po_gp_grn_qc_pb/new_tests"
         if p.exists():
             return str(p)
 

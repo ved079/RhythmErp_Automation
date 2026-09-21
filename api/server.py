@@ -40,7 +40,7 @@ from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
 from api.batch_create import batch_create_stream, _build_payloads_only, export_batch_excel
-from api.purchase_chain_endpoint import purchase_chain_stream, connector_wago_chain_stream
+from api.purchase_chain_endpoint import purchase_chain_stream, connector_wago_chain_stream, po_gp_grn_qc_pb_flow_stream
 from api.pb_concurrency_endpoint import pb_concurrency_stream
 from api.database import init_db
 from api.screenshot_store import take_screenshot
@@ -492,6 +492,18 @@ def connector_wago_chain_endpoint(request: dict):
     steps = request.get("steps") or None
     return StreamingResponse(
         connector_wago_chain_stream(count, steps=steps),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+@app.post("/api/po-gp-grn-qc-pb-flow")
+def po_gp_grn_qc_pb_flow_endpoint(request: dict):
+    """PO→GP→GRN→QC→PB flow — dynamic item from CBR, no token required."""
+    count = max(1, min(int(request.get("count", 1)), 20))
+    steps = request.get("steps") or None
+    return StreamingResponse(
+        po_gp_grn_qc_pb_flow_stream(count, steps=steps),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
