@@ -1,6 +1,12 @@
 # Claude Code session data
 .claude/
 
+# Personal one-off scripts
+create_companies.py
+create_customers.py
+get_fk_options.py
+qc-validator-mockup.html
+
 # Sync scripts (personal workflow, not for repo)
 eod_sync_github.ps1
 eod_sync_gitlab.ps1
