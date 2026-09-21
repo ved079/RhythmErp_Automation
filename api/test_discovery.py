@@ -215,7 +215,7 @@ def parse_test_functions(file_path: str, test_type: str = "ui") -> list[TestFunc
             source = f.read()
         tree = ast.parse(source)
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_") and not node.name.startswith("test_batch_"):
                 docstring = ast.get_docstring(node)
                 tests.append(TestFunction(
                     name=node.name,
