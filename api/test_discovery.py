@@ -278,9 +278,16 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
                             pw_sub_files = []
                             pw_sub_tests = []
                             for pw_tf in sorted(os.listdir(tf_path)):
+                                pw_tf_full = os.path.join(tf_path, pw_tf)
                                 if pw_tf.startswith("test_") and pw_tf.endswith(".py"):
                                     pw_sub_files.append(pw_tf)
-                                    pw_sub_tests.extend(parse_test_functions(os.path.join(tf_path, pw_tf), test_type="ui"))
+                                    pw_sub_tests.extend(parse_test_functions(pw_tf_full, test_type="ui"))
+                                elif os.path.isdir(pw_tf_full) and not pw_tf.startswith("_"):
+                                    # One more level deep (e.g. new_tests/)
+                                    for pw_tf2 in sorted(os.listdir(pw_tf_full)):
+                                        if pw_tf2.startswith("test_") and pw_tf2.endswith(".py"):
+                                            pw_sub_files.append(f"{pw_tf}/{pw_tf2}")
+                                            pw_sub_tests.extend(parse_test_functions(os.path.join(pw_tf_full, pw_tf2), test_type="ui"))
                             if pw_sub_files:
                                 sub_modules.append(SubModule(
                                     name=tf,
