@@ -49,6 +49,10 @@ class GRNPage(BasePlaywrightPage):
 
     def select_supplier(self, name):
         self._select_mat_by_text(self.SUPPLIER_NAME, name)
+        # Fallback: verify the field actually shows the selected name
+        actual = self.page.locator(self.SUPPLIER_NAME).first.text_content().strip()
+        if actual != name:
+            raise RuntimeError(f"GRN supplier mismatch — expected '{name}', got '{actual}'")
 
     def select_gate_pass(self, gp_ref_no):
         self._select_mat_by_text(self.GATE_PASS_NO, gp_ref_no)

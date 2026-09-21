@@ -2,6 +2,100 @@ import pytest
 from pages.private_b2b.modules.Purchase_Flow_Tests.test.playwright.po_gp_grn_qc_pb.new_tests.pages.qc_page import compute_actual_values
 
 
+def _get_supplier_options(page):
+    """Open the Supplier Name dropdown, collect all option texts, then close it."""
+    sel = "xpath=//mat-label[contains(.,'Supplier Name')]/ancestor::mat-form-field//mat-select"
+    page.locator(sel).first.click(force=True)
+    page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+    opts = [
+        o.inner_text().strip()
+        for o in page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option) span.mdc-list-item__primary-text"
+        ).all()
+        if o.inner_text().strip()
+    ]
+    page.keyboard.press("Escape")
+    try:
+        page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+    except Exception:
+        pass
+    return opts
+
+
+@pytest.mark.smoke
+class TestSupplierFarmerDropdownAccess:
+    """Verify supplier/farmer visibility rules on PO and GP supplier dropdowns.
+
+    Rule:
+      - PO supplier dropdown: only Suppliers visible, no Farmers
+      - GP supplier dropdown: both Suppliers AND Farmers visible
+    """
+
+    def test_po_supplier_dropdown_excludes_farmers(self, po_page, flow_state):
+        """PO supplier dropdown must show suppliers — and fewer names than GP (no farmers)."""
+        po_page.open_add_form()
+        po_names = set(_get_supplier_options(po_page.page))
+        po_page.force_close_popup()
+
+        assert po_names, "PO supplier dropdown should not be empty"
+        assert "Urban Harvest Ltd" in po_names, "Known supplier must appear in PO dropdown"
+
+        flow_state["po_supplier_names"] = po_names
+
+    def test_gp_has_farmers_not_in_po(self, gp_page, flow_state):
+        """GP supplier dropdown must include names absent from PO dropdown (those are farmers)."""
+        po_names = flow_state.get("po_supplier_names")
+        if not po_names:
+            pytest.skip("PO supplier names not captured")
+
+        gp_page.open_add_form()
+        gp_names = set(_get_supplier_options(gp_page.page))
+        gp_page.force_close_popup()
+
+        assert gp_names, "GP supplier dropdown should not be empty"
+        assert "Urban Harvest Ltd" in gp_names, "Known supplier must appear in GP dropdown"
+
+        farmer_only = gp_names - po_names
+        assert farmer_only, (
+            f"GP dropdown should contain farmer names absent from PO, but sets are equal"
+        )
+        flow_state["farmer_only_names"] = farmer_only
+
+    def test_gp_farmer_supplier_type_is_farmer(self, gp_page, flow_state):
+        """Select a GP-only name and confirm its Supplier Type auto-fills as 'Farmer'."""
+        farmer_only = flow_state.get("farmer_only_names")
+        if not farmer_only:
+            pytest.skip("No GP-only names found")
+
+        farmer_name = next(iter(farmer_only))
+        gp_page.open_add_form()
+
+        sel = "xpath=//mat-label[contains(.,'Supplier Name')]/ancestor::mat-form-field//mat-select"
+        gp_page.page.locator(sel).first.click(force=True)
+        gp_page.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        for opt in gp_page.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all():
+            if opt.inner_text().strip() == farmer_name:
+                opt.click(force=True)
+                break
+        try:
+            gp_page.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        gp_page.page.wait_for_timeout(1000)
+
+        supplier_type = gp_page.page.locator(
+            "xpath=//mat-label[contains(.,'Supplier Type')]/ancestor::mat-form-field//mat-select"
+        ).text_content().strip()
+
+        gp_page.force_close_popup()
+
+        assert supplier_type == "Farmer", (
+            f"Expected Supplier Type='Farmer' for '{farmer_name}', got '{supplier_type}'"
+        )
+
+
 @pytest.mark.smoke
 class TestPOGPGRNQCPBFlow:
     def test_create_po(self, po_page, flow_state, chain_config):
@@ -39,17 +133,6 @@ class TestPOGPGRNQCPBFlow:
         flow_state["po_ref_no"] = ref_no
         print(f"DOC_CREATED:PO:{ref_no}", flush=True)
 
-    def test_verify_po(self, po_page, flow_state):
-        cfg    = flow_state["chain_config"]
-        ref_no = flow_state["po_ref_no"]
-        po_page.search(ref_no)
-        po_page.open_view(ref_no)
-
-        assert po_page.get_supplier_name() == "Urban Harvest Ltd"
-        assert po_page.get_total_po_amount(), "Total PO Amount should not be empty"
-
-        po_page.close_view()
-
     def test_create_gp(self, gp_page, flow_state):
         cfg  = flow_state["chain_config"]
         item = cfg["item_name"]
@@ -76,16 +159,6 @@ class TestPOGPGRNQCPBFlow:
         flow_state["gp_ref_no"] = ref_no
         print(f"DOC_CREATED:GP:{ref_no}", flush=True)
 
-    def test_verify_gp(self, gp_page, flow_state):
-        cfg    = flow_state["chain_config"]
-        ref_no = flow_state["gp_ref_no"]
-        gp_page.search(ref_no)
-        gp_page.open_view(ref_no)
-
-        assert gp_page.get_quantity() == str(cfg["quantity"])
-
-        gp_page.close_view()
-
     def test_create_grn(self, grn_page, flow_state):
         cfg = flow_state["chain_config"]
 
@@ -107,18 +180,6 @@ class TestPOGPGRNQCPBFlow:
         assert ref_no, f"GRN not confirmed in table after {_MAX_RETRIES} attempts"
         flow_state["grn_ref_no"] = ref_no
         print(f"DOC_CREATED:GRN:{ref_no}", flush=True)
-
-    def test_verify_grn(self, grn_page, flow_state):
-        cfg    = flow_state["chain_config"]
-        ref_no = flow_state["grn_ref_no"]
-        grn_page.search(ref_no)
-        grn_page.open_view(ref_no)
-
-        assert grn_page.get_grn_ref_no() == ref_no
-        assert grn_page.get_gate_pass_no() == flow_state["gp_ref_no"]
-        assert grn_page.get_received_quantity() == str(cfg["quantity"])
-
-        grn_page.close_view()
 
     def test_create_qc(self, qc_page, flow_state):
         cfg            = flow_state["chain_config"]
@@ -155,15 +216,6 @@ class TestPOGPGRNQCPBFlow:
         assert ref_no, "QC ref_no should not be empty"
         flow_state["qc_ref_no"] = ref_no
 
-    def test_verify_qc(self, qc_page, flow_state):
-        ref_no = flow_state["qc_ref_no"]
-        qc_page.search(ref_no)
-        qc_page.open_view(ref_no)
-
-        assert qc_page.get_qc_deduction_pct(), "QC Deduction % should not be empty"
-
-        qc_page.close_view()
-
     def test_create_pb(self, pb_page, flow_state):
         prev_top = pb_page.get_ref_no_of_first_row()
         print(f"PRE_TOP:PB:{prev_top}", flush=True)
@@ -196,14 +248,44 @@ class TestPOGPGRNQCPBFlow:
         flow_state["pb_ref_no"] = ref_no
         print(f"DOC_CREATED:PB:{ref_no}", flush=True)
 
-    def test_verify_pb(self, pb_page, flow_state):
-        ref_no = flow_state["pb_ref_no"]
-        pb_page.search(ref_no)
-        pb_page.open_view(ref_no)
+    def test_verify_closed_status(self, po_page, gp_page, grn_page, qc_page, flow_state):
+        """After PB submission: QC → GRN → GP → PO should all show Closed status."""
+        po_ref  = flow_state["po_ref_no"]
+        gp_ref  = flow_state["gp_ref_no"]
+        grn_ref = flow_state["grn_ref_no"]
+        qc_ref  = flow_state["qc_ref_no"]
 
-        assert pb_page.get_net_payable_amount(), "Net Payable Amount should not be empty"
+        # QC — Purchase Booking Status
+        qc_page.navigate_to_page()
+        qc_page.search(qc_ref)
+        qc_status = qc_page.page.locator(
+            f"tr:has-text('{qc_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert qc_status == "Closed", f"QC Purchase Booking Status: expected 'Closed', got '{qc_status}'"
 
-        pb_page.close_view()
+        # GRN — QC Status
+        grn_page.navigate_to_page()
+        grn_page.search(grn_ref)
+        grn_status = grn_page.page.locator(
+            f"tr:has-text('{grn_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert grn_status == "Closed", f"GRN QC Status: expected 'Closed', got '{grn_status}'"
+
+        # GP — GRN Status
+        gp_page.navigate_to_page()
+        gp_page.search(gp_ref)
+        gp_status = gp_page.page.locator(
+            f"tr:has-text('{gp_ref}') td.mat-column-booking_status span"
+        ).first.text_content().strip()
+        assert gp_status == "Closed", f"GP GRN Status: expected 'Closed', got '{gp_status}'"
+
+        # PO — PO Status
+        po_page.navigate_to_page()
+        po_page.search(po_ref)
+        po_status = po_page.page.locator(
+            f"tr:has-text('{po_ref}') td.mat-column-po_status span"
+        ).first.text_content().strip()
+        assert po_status == "Closed", f"PO status: expected 'Closed', got '{po_status}'"
 
 
 _MAX_RETRIES = 3

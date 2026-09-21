@@ -161,11 +161,15 @@ class PBPage(BasePlaywrightPage):
         search = self.page.locator(".mat-mdc-select-panel input.dd-search-input")
         if search.count() > 0:
             search.fill(text)
-            self.page.wait_for_timeout(800)
-        for opt in self.page.locator(
-            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
-        ).all():
+            # Wait for options to filter before iterating
+            self.page.wait_for_timeout(1000)
+        opts_loc = self.page.locator(
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option) span.mdc-list-item__primary-text"
+        )
+        opts_loc.first.wait_for(state="visible", timeout=5000)
+        for opt in opts_loc.all():
             if opt.inner_text().strip() == text:
+                opt.scroll_into_view_if_needed()
                 opt.click(force=True)
                 break
         try:
