@@ -62,8 +62,9 @@ DISPLAY_NAMES = {
     "gate_pass": "Gate Pass",
     "quality_check": "Quality Check",
     "Purchase_Flow_Tests": "Purchase Flow Tests",
-    "direct_pb_flow": "Direct PB Flow",
-    "po_qc_pb_flow":  "PO → QC → PB Flow",
+    "direct_pb_flow":        "Direct PB Flow",
+    "po_qc_pb_flow":         "PO → QC → PB Flow",
+    "po_gp_grn_qc_pb_flow":  "PO → GP → GRN → QC → PB",
 }
 
 # Curated display names per test function for BA/QA readability.

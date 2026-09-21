@@ -50,6 +50,7 @@ ALLOWED_SUB_MODULES = {
     # purchase flows
     "direct_pb_flow",
     "po_qc_pb_flow",
+    "po_gp_grn_qc_pb_flow",
     # common_settings
     "bank", "designation", "error_code_mst", "hsn_sac", "season",
     "tax_authority", "tax_rate", "uom", "uom_conversion", "vehicle_master",
