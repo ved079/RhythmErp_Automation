@@ -1106,6 +1106,50 @@ window.__erpRecorderInjected = true;
       }
     }
 
+    // Listing table cell click → record field assertion
+    const tdCell = e.target.closest('td.mat-mdc-cell');
+    if (tdCell && !tdCell.classList.contains('mat-column-actions') && !e.target.closest('button')) {
+      const colClass = [...tdCell.classList].find(c => c.startsWith('cdk-column-'));
+      if (colClass) {
+        const colKey = colClass.replace('cdk-column-', '');
+        const table = tdCell.closest('table');
+        const th = table ? table.querySelector(`th.cdk-column-${colKey}`) : null;
+        // Header label: prefer strong inside .mat-sort-header-content, fall back to any strong, then raw text
+        const headerText = th
+          ? (th.querySelector('.mat-sort-header-content strong, strong')?.textContent.trim()
+             || th.querySelector('.mat-sort-header-content')?.textContent.trim()
+             || th.textContent.trim().replace(/\s+/g, ' ') || colKey)
+          : colKey;
+        // Cell value: prefer <mark> (search highlight), then first <span>, then text
+        const markEl = tdCell.querySelector('mark');
+        const spanEl = tdCell.querySelector('span.ng-star-inserted, span');
+        const value = (markEl || spanEl)
+          ? (markEl || spanEl).textContent.trim()
+          : tdCell.textContent.replace(/\s+/g, ' ').trim();
+        if (!value) { recordButtonClick(e); return; }
+
+        // Scoped locator: try to find ref_no in the same row
+        const row = tdCell.closest('tr');
+        const refCell = row ? row.querySelector(
+          'td.cdk-column-transaction_ref_no mark, td.cdk-column-transaction_ref_no span'
+        ) : null;
+        const rowRef = refCell ? refCell.textContent.trim() : null;
+
+        const matColClass = `mat-column-${colKey}`;
+        const safeVal = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        let code;
+        if (rowRef) {
+          const safeRef = rowRef.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          code = `# Listing table: "${headerText}" = "${safeVal}"  [row: ${rowRef}]\nassert page.locator("tr:has-text('${safeRef}') td.${matColClass} span").first.text_content().strip() == "${safeVal}"`;
+        } else {
+          code = `# Listing table: "${headerText}" = "${safeVal}"\nassert page.locator("td.${matColClass} span").first.text_content().strip() == "${safeVal}"`;
+        }
+        addStep({ type: 'readonly', label: headerText, value, code });
+        e.stopPropagation(); // prevent row click from opening the view form
+        return;
+      }
+    }
+
     // Button clicks that drive the flow (Add / Submit / Update / Close …)
     recordButtonClick(e);
   }, true);
