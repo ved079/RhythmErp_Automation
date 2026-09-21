@@ -208,6 +208,7 @@ function generateCode(steps) {
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const prev = steps[i - 1];
+    const nextStep = steps[i + 1];
     const phase = phaseOf(s.type);
 
     // ── Phase section header ──────────────────────────────────────────
@@ -273,7 +274,6 @@ function generateCode(steps) {
     // ── Main code line + field-type hint ─────────────────────────────
     // Suppress the standalone Search button click when the next step is a
     // search step (the search step already includes the if-not-visible guard)
-    const nextStep = steps[i + 1];
     const isRedundantSearchBtn = s.type === 'button' &&
       (s.code || '').includes("mattooltip='Search'") &&
       nextStep && nextStep.type === 'search';
